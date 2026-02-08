@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from datetime import date
 
 import aiohttp
 
@@ -168,3 +169,11 @@ class EasyjobClient:
         """POST /api.json/Timecard/CloseWorkTime"""
         url = f"{self._base_url}/api.json/Timecard/CloseWorkTime"
         await self._request("POST", url)
+    
+    async def async_fetch_calendar(self, start: date, end: date) -> list[dict[str, Any]]:
+        """Fetch calendar items from easyjob resource plan."""
+        days = max(1, (end - start).days)
+        startdate = start.strftime("%Y-%m-%d") 
+        url = f"{self._base_url}/api.json/dashboard/calendar/?days={days}&startdate={startdate}"
+        payload = await self._request("GET", url)
+        return payload or []

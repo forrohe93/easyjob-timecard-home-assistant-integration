@@ -10,13 +10,20 @@ from .const import DOMAIN
 from .coordinator import EasyjobCoordinator
 
 SENSORS = [
-    ("date", "Date", None, lambda d: d.date),
-    ("holidays", "Holidays", None, lambda d: d.holidays),
+    ("holidays", "Holidays", "days", lambda d: d.holidays),
     ("total_work_minutes", "Total work minutes", "min", lambda d: d.total_work_minutes),
     ("work_minutes", "Work minutes", "min", lambda d: d.work_minutes),
     ("work_minutes_planed", "Work minutes planed", "min", lambda d: d.work_minutes_planed),
     ("work_time", "Work time", None, lambda d: d.work_time),
 ]
+
+ICONS: dict[str, str] = {
+    "holidays": "mdi:beach",
+    "total_work_minutes": "mdi:counter",
+    "work_minutes": "mdi:timer-outline",
+    "work_minutes_planed": "mdi:calendar-clock",
+    "work_time": "mdi:clock-outline",
+}
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -48,6 +55,7 @@ class EasyjobSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._entry = entry
         self._getter = getter
+        self._key = key
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_name = f"{username} {name}"
         self._attr_native_unit_of_measurement = unit
@@ -55,11 +63,27 @@ class EasyjobSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         data = self.coordinator.data
-        return None if data is None else self._getter(data)
+        if data is None:
+            return None
+
+        value = self._getter(data)
+
+        if value is None:
+            return None
+
+        # Minuten-Sensoren immer als Ganzzahl
+        if isinstance(value, (int, float)):
+            return int(value)
+
+        return value
+
+
+    @property
+    def icon(self) -> str | None:
+        return ICONS.get(self._key)
 
     @property
     def device_info(self):
-        # sorgt dafür, dass die Sensoren im gleichen Gerät wie die Buttons auftauchen
         return {
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": f"Easyjob ({self._entry.data.get('username','user')})",

@@ -1,7 +1,12 @@
 from homeassistant.const import Platform
 
 DOMAIN = "easyjob_timecard"
-PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.BINARY_SENSOR]
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.CALENDAR,
+]
 
 CONF_BASE_URL = "base_url"
 CONF_USERNAME = "username"
