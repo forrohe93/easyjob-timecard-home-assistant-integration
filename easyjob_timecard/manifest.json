@@ -1,0 +1,10 @@
+{
+  "domain": "easyjob_timecard",
+  "name": "easyjob Timecard",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://documenter.getpostman.com/view/17814395/UVR8onMz",
+  "requirements": [],
+  "codeowners": ["@heikoforro"],
+  "iot_class": "cloud_polling"
+}

@@ -1,0 +1,8 @@
+{
+  "config": {
+    "error": {
+      "auth_failed": "Login fehlgeschlagen. Bitte URL/Benutzer/Kennwort prüfen.",
+      "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen."
+    }
+  }
+}
