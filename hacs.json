@@ -1,0 +1,6 @@
+{
+  "name": "easyjob Timecard",
+  "content_in_root": false,
+  "domain": "easyjob_timecard",
+  "homeassistant": "2024.6.0"
+}
