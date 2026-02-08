@@ -1,12 +1,41 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.components import persistent_notification, websocket_api
+from homeassistant.util import dt as dt_util
 
 from .api import EasyjobClient
 from .coordinator import EasyjobCoordinator
-from .const import DOMAIN, PLATFORMS, CONF_BASE_URL, CONF_USERNAME, CONF_PASSWORD, CONF_VERIFY_SSL
+from .const import (
+    DOMAIN,
+    PLATFORMS,
+    CONF_BASE_URL,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_VERIFY_SSL,
+)
+
+import logging
+
+_LOGGER = logging.getLogger(__name__)
+
+SERVICE_SET_RESOURCE_STATE = "set_resource_state"
+
+SERVICE_SET_RESOURCE_STATE_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Required("start"): cv.datetime,
+        vol.Required("end"): cv.datetime,
+    }
+)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
@@ -18,6 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         password=entry.data[CONF_PASSWORD],
         verify_ssl=entry.data.get(CONF_VERIFY_SSL, True),
     )
+
     coordinator = EasyjobCoordinator(hass, client)
     await coordinator.async_config_entry_first_refresh()
 
@@ -26,19 +56,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    if not hass.services.has_service(DOMAIN, "start"):
+    # Service/Action nur einmal global registrieren
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_RESOURCE_STATE):
 
-        async def handle_start(call: ServiceCall) -> None:
-            await _handle_start(hass, call)
+        async def _service_handler(call: ServiceCall) -> None:
+            await _handle_set_resource_state(hass, call)
 
-        async def handle_stop(call: ServiceCall) -> None:
-            await _handle_stop(hass, call)
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_RESOURCE_STATE,
+            _service_handler,
+            schema=SERVICE_SET_RESOURCE_STATE_SCHEMA,
+        )
 
-        hass.services.async_register(DOMAIN, "start", handle_start)
-        hass.services.async_register(DOMAIN, "stop", handle_stop)
+    # WebSocket command registrieren, damit Aufrufer ein Ergebnis zurückerhalten
+    @websocket_api.async_response
+    @websocket_api.require_admin
+    @websocket_api.websocket_command({
+        "type": "easyjob_timecard/set_resource",
+        "device_id": str,
+        "start": str,
+        "end": str,
+    })
+    async def ws_set_resource(hass, connection, msg):
+        try:
+            start_dt = dt_util.parse_datetime(msg["start"])
+            end_dt = dt_util.parse_datetime(msg["end"])
+            result = await _perform_set_resource_state(hass, msg["device_id"], start_dt, end_dt)
+            connection.send_result(msg["id"], {"result": result})
+        except Exception as err:
+            _LOGGER.exception("WebSocket set_resource failed: %s", err)
+            connection.send_error(msg["id"], "error", str(err))
 
+    websocket_api.async_register_command(hass, ws_set_resource)
 
     return True
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -46,22 +99,98 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
 
-def _entry_id(call: ServiceCall) -> str:
-    eid = call.data.get("entry_id")
-    if not eid:
-        raise ValueError("entry_id fehlt")
-    return eid
 
-async def _handle_start(hass: HomeAssistant, call: ServiceCall) -> None:
-    entry_id = _entry_id(call)
-    client = hass.data[DOMAIN][entry_id]["client"]
-    coordinator = hass.data[DOMAIN][entry_id]["coordinator"]
-    await client.async_start()
-    await coordinator.async_request_refresh()
+async def _perform_set_resource_state(hass: HomeAssistant, device_id: str, start_dt, end_dt) -> any:
+    """Kernfunktion, die den Ressourcenstatus setzt und das API-Result zurückgibt."""
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
 
-async def _handle_stop(hass: HomeAssistant, call: ServiceCall) -> None:
-    entry_id = _entry_id(call)
-    client = hass.data[DOMAIN][entry_id]["client"]
-    coordinator = hass.data[DOMAIN][entry_id]["coordinator"]
-    await client.async_stop()
+    device = dev_reg.async_get(device_id)
+    if device is None:
+        raise ValueError("device_id nicht gefunden.")
+
+    # Device -> Config Entry(s)
+    config_entry_ids = list(device.config_entries)
+    if not config_entry_ids:
+        raise ValueError("Kein Config Entry für dieses Gerät gefunden.")
+
+    entry_id = config_entry_ids[0]
+
+    if DOMAIN not in hass.data or entry_id not in hass.data[DOMAIN]:
+        raise ValueError("Config Entry der Integration nicht geladen (hass.data).")
+
+    client: EasyjobClient = hass.data[DOMAIN][entry_id]["client"]
+    coordinator: EasyjobCoordinator = hass.data[DOMAIN][entry_id]["coordinator"]
+
+    # Select-Entity auf diesem Device finden (domain=select, platform=easyjob_timecard)
+    select_entity_id: str | None = None
+    for e in er.async_entries_for_device(ent_reg, device_id):
+        if e.domain == "select" and e.platform == DOMAIN:
+            select_entity_id = e.entity_id
+            break
+
+    if not select_entity_id:
+        raise ValueError("Keine Ressourcenstatus-Select-Entity auf dem Gerät gefunden.")
+
+    sel_state = hass.states.get(select_entity_id)
+    if sel_state is None:
+        raise ValueError("Select-Entity State nicht gefunden.")
+
+    caption = sel_state.state
+    if not caption or caption in ("unknown", "unavailable"):
+        raise ValueError("Ressourcenstatus ist nicht ausgewählt oder nicht verfügbar.")
+
+    # Caption -> IdResourceStateType auflösen (robust)
+    types = await client.async_get_resource_state_types()
+    caption_to_id = {
+        t.get("Caption"): int(t.get("IdResourceStateType"))
+        for t in types
+        if t.get("Caption") and t.get("IdResourceStateType") is not None
+    }
+
+    type_id = caption_to_id.get(caption)
+    if not type_id:
+        raise ValueError(f"Ressourcenstatus '{caption}' nicht in der API-Liste gefunden.")
+
+    # API erwartet: "YYYY-MM-DDTHH:MM:SS"
+    start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    end_iso = end_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    result = await client.async_save_resource_state(
+        id_resource_state_type=int(type_id),
+        start_iso=start_iso,
+        end_iso=end_iso,
+    )
+
+    # Fire event and persistent notification for backward compatibility
+    hass.bus.async_fire(
+        "easyjob_timecard_set_resource_result",
+        {"device_id": device_id, "result": result},
+    )
+
+    try:
+        persistent_notification.async_create(
+            hass,
+            f"Ressourcenstatus gesetzt. API-Antwort: {result}",
+            "easyjob_timecard",
+        )
+    except Exception:
+        _LOGGER.debug("Konnte persistent notification nicht erstellen.")
+
     await coordinator.async_request_refresh()
+    return result
+
+
+async def _handle_set_resource_state(hass: HomeAssistant, call: ServiceCall) -> None:
+    device_id: str = call.data["device_id"]
+    start_dt = call.data["start"]
+    end_dt = call.data["end"]
+
+    try:
+        result = await _perform_set_resource_state(hass, device_id, start_dt, end_dt)
+        _LOGGER.info("Ressourcenstatus gesetzt, API-Antwort: %s", result)
+    except Exception as err:
+        _LOGGER.exception("Fehler beim Setzen des Ressourcenstatus: %s", err)
+        raise
+
+    return result

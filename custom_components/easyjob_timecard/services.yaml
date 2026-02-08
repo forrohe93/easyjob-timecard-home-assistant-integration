@@ -1,0 +1,21 @@
+set_resource_state:
+  name: Ressourcenstatus eintragen
+  description: Erstellt einen Ressourcenstatus-Eintrag (z.B. Urlaub, Krank, Mobile Office)
+  fields:
+    device_id:
+      name: Gerät
+      description: Das Easyjob-Gerät (pro Benutzer/Account)
+      required: true
+      selector:
+        device:
+          integration: easyjob_timecard
+    start:
+      name: Start
+      required: true
+      selector:
+        datetime: {}
+    end:
+      name: Ende
+      required: true
+      selector:
+        datetime: {}

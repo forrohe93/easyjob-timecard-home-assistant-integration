@@ -2,7 +2,8 @@
   "config": {
     "error": {
       "auth_failed": "Login fehlgeschlagen. Bitte URL/Benutzer/Kennwort prüfen.",
-      "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen."
+      "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen.",
+      "not_timecard_user": "User is not a Timecard user."
     }
   }
 }

@@ -6,6 +6,8 @@ PLATFORMS = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.CALENDAR,
+    Platform.SWITCH,
+    Platform.SELECT,
 ]
 
 CONF_BASE_URL = "base_url"

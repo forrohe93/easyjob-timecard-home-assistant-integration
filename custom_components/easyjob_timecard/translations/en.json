@@ -1,0 +1,9 @@
+{
+  "config": {
+    "error": {
+      "auth_failed": "Login failed. Please check the URL/username/password.",
+      "unknown": "Unknown error. Please check logs.",
+      "not_timecard_user": "The user is not a Timecard user."
+    }
+  }
+}

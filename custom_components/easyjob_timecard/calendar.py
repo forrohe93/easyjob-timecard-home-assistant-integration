@@ -47,7 +47,7 @@ class EasyjobResourcePlanCalendar(CalendarEntity):
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": f"Easyjob ({self._entry.data.get('username','user')})",
             "manufacturer": "protonic",
-            "model": "easyjob Resourcenplan",
+            "model": "easyjob Timecard",
         }
 
     @property

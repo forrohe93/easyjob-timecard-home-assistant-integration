@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import voluptuous as vol
+
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import EasyjobClient, EasyjobAuthError
+from .api import EasyjobClient, EasyjobAuthError, EasyjobNotTimecardUserError
 from .const import (
     DOMAIN,
     CONF_BASE_URL,
@@ -15,11 +17,14 @@ from .const import (
     DEFAULT_VERIFY_SSL,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
@@ -32,13 +37,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     verify_ssl=user_input[CONF_VERIFY_SSL],
                 )
                 await client.async_test_auth()
+                await client.async_validate_timecard_user()
+
+            except EasyjobNotTimecardUserError:
+                errors["base"] = "not_timecard_user"
+
             except EasyjobAuthError:
-                errors["base"] = "auth_failed"
-            except Exception:
+                # HA Standard-Key ist "invalid_auth"
+                errors["base"] = "invalid_auth"
+
+            except Exception as err:
+                _LOGGER.exception("Unhandled error during config flow: %s", err)
                 errors["base"] = "unknown"
+
             else:
+                base_url = user_input[CONF_BASE_URL].rstrip("/")
+
+                title = f"{base_url} - {user_input[CONF_USERNAME]}"
                 return self.async_create_entry(
-                    title=user_input[CONF_USERNAME],
+                    title=title,
                     data={
                         CONF_BASE_URL: user_input[CONF_BASE_URL],
                         CONF_USERNAME: user_input[CONF_USERNAME],
@@ -65,11 +82,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        # NICHT self.config_entry = ... (read-only property)!
         self._config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
@@ -82,12 +98,19 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     verify_ssl=user_input[CONF_VERIFY_SSL],
                 )
                 await client.async_test_auth()
+                await client.async_validate_timecard_user()
+
+            except EasyjobNotTimecardUserError:
+                errors["base"] = "not_timecard_user"
+
             except EasyjobAuthError:
-                errors["base"] = "auth_failed"
-            except Exception:
+                errors["base"] = "invalid_auth"
+
+            except Exception as err:
+                _LOGGER.exception("Unhandled error during options flow: %s", err)
                 errors["base"] = "unknown"
+
             else:
-                # Update Entry Daten
                 new_data = dict(self._config_entry.data)
                 new_data.update(
                     {
@@ -98,10 +121,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     }
                 )
                 self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
-
-                # Entry neu laden, damit neuer Client mit neuen Credentials/SSL gebaut wird
                 await self.hass.config_entries.async_reload(self._config_entry.entry_id)
-
                 return self.async_create_entry(title="", data={})
 
         data = self._config_entry.data

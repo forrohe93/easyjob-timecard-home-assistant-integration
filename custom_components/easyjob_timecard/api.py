@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -10,6 +10,9 @@ import aiohttp
 
 class EasyjobAuthError(Exception):
     """Raised when authentication/token retrieval fails."""
+
+class EasyjobNotTimecardUserError(Exception):
+    """User is not a Timecard user (IsTimeCardUser is false)."""
 
 
 @dataclass
@@ -69,7 +72,7 @@ class EasyjobClient:
                 data=form,
                 headers=headers,
                 timeout=20,
-                ssl=self._verify_ssl,  # ✅ verify_ssl berücksichtigt
+                ssl=self._verify_ssl,  #  verify_ssl berücksichtigt
             ) as resp:
                 if resp.status in (401, 403):
                     raise EasyjobAuthError("Token-Login fehlgeschlagen (401/403).")
@@ -91,8 +94,12 @@ class EasyjobClient:
         self._token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
         return token
 
-    async def _request(self, method: str, url: str) -> Any:
-        """Perform a request with Bearer auth; retry once on 401 with fresh token."""
+    async def _request(self, method: str, url: str, **kwargs) -> Any:
+        """Perform a request with Bearer auth; retry once on 401 with fresh token.
+
+        Extra keyword arguments (e.g. `json`, `params`) are forwarded to
+        `aiohttp.ClientSession.request`.
+        """
         token = await self.async_get_token()
         headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
 
@@ -102,7 +109,8 @@ class EasyjobClient:
                 url,
                 headers=headers,
                 timeout=20,
-                ssl=self._verify_ssl,  # ✅ verify_ssl berücksichtigt
+                ssl=self._verify_ssl,
+                **kwargs,
             ) as resp:
                 if resp.status == 401:
                     token = await self.async_get_token(force=True)
@@ -112,24 +120,24 @@ class EasyjobClient:
                         url,
                         headers=headers,
                         timeout=20,
-                        ssl=self._verify_ssl,  # ✅ verify_ssl berücksichtigt
+                        ssl=self._verify_ssl,
+                        **kwargs,
                     ) as resp2:
                         resp2.raise_for_status()
                         if resp2.content_type == "application/json":
                             return await resp2.json()
-                        return None
+                        return await resp2.text()
 
                 resp.raise_for_status()
                 if resp.content_type == "application/json":
                     return await resp.json()
-                return None
+                return await resp.text()
 
         except aiohttp.ClientConnectorCertificateError as err:
             raise EasyjobAuthError(f"SSL-Zertifikatsfehler: {err}") from err
         except aiohttp.ClientSSLError as err:
             raise EasyjobAuthError(f"SSL-Fehler: {err}") from err
         except aiohttp.ClientError as err:
-            # kein Auth-Fehler, aber Netzwerk/HTTP-Problem
             raise err
 
     # -------- Public API --------
@@ -177,3 +185,62 @@ class EasyjobClient:
         url = f"{self._base_url}/api.json/dashboard/calendar/?days={days}&startdate={startdate}"
         payload = await self._request("GET", url)
         return payload or []
+
+    _idaddress: int | None = None
+
+    async def async_get_idaddress(self, force: bool = False) -> int:
+        """GET /api.json/Common/GetWebSettings -> IdAddress"""
+        if self._idaddress is not None and not force:
+            return self._idaddress
+
+        url = f"{self._base_url}/api.json/Common/GetWebSettings"
+        payload = await self._request("GET", url)
+
+        # je nach API kann das Feld anders heißen  passe ggf. an:
+        # häufig: payload["IdAddress"] oder payload["IdAddressDefault"] o.ä.
+        idaddress = payload.get("IdAddress") or payload.get("IdAddressDefault") or payload.get("idaddress")
+        if not idaddress:
+            raise ValueError("Konnte IdAddress nicht aus GetWebSettings lesen.")
+        self._idaddress = int(idaddress)
+        return self._idaddress
+
+    async def async_get_resource_state_types(self) -> list[dict[str, Any]]:
+        """GET /api.json/ResourceStates/GetFormData?id=0&idaddress=..."""
+        idaddress = await self.async_get_idaddress()
+        url = f"{self._base_url}/api.json/ResourceStates/GetFormData?id=0&idaddress={idaddress}"
+        payload = await self._request("GET", url)
+        return payload.get("ResourceStateTypeSelection", []) or []
+
+    async def async_save_resource_state(
+        self,
+        id_resource_state_type: int,
+        start_iso: str,
+        end_iso: str,
+    ) -> Any:
+        """POST /api.json/ResourceStates/Save"""
+        idaddress = await self.async_get_idaddress()
+        url = f"{self._base_url}/api.json/ResourceStates/Save"
+        body = {
+            "IdResourceState": 0,
+            "Address": {"IdAddress": idaddress},
+            "IdResourceStateType": int(id_resource_state_type),
+            "StartDate": start_iso,
+            "EndDate": end_iso,
+        }
+        payload = await self._request("POST", url, json=body)
+        return payload
+
+    async def async_get_web_settings(self) -> dict:
+        """GET /api.json/Common/GetWebSettings"""
+        url = f"{self._base_url}/api.json/Common/GetWebSettings"
+        payload = await self._request("GET", url)
+        if not isinstance(payload, dict):
+            raise ValueError("GetWebSettings returned unexpected response.")
+        return payload
+
+    async def async_validate_timecard_user(self) -> None:
+        """Raise if user is not a Timecard user."""
+        ws = await self.async_get_web_settings()
+        is_tc = ws.get("IsTimeCardUser")
+        if is_tc is not True:
+            raise EasyjobNotTimecardUserError("User is not Timecard user")
