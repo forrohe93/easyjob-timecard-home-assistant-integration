@@ -1,7 +1,7 @@
 {
   "domain": "easyjob_timecard",
   "name": "easyjob Timecard",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "config_flow": true,
   "documentation": "https://documenter.getpostman.com/view/17814395/UVR8onMz",
   "requirements": [],
