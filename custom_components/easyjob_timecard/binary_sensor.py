@@ -6,34 +6,35 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import EntityCategory
 
+from . import RuntimeData
 from .const import DOMAIN
-from .coordinator import EasyjobCoordinator
-from .entity import EasyjobBaseEntity
+from .entity import EasyjobCoordinatorEntity
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: EasyjobCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
 
     async_add_entities(
         [
-            EasyjobConnectedBinarySensor(coordinator, entry),
-            EasyjobWorktimeActiveBinarySensor(coordinator, entry),
-        ]
+            EasyjobConnectedBinarySensor(runtime, entry),
+            EasyjobWorktimeActiveBinarySensor(runtime, entry),
+        ],
+        update_before_add=True,
     )
 
 
-class _BaseEasyjobBinarySensor(EasyjobBaseEntity, CoordinatorEntity, BinarySensorEntity):
+class _BaseEasyjobBinarySensor(EasyjobCoordinatorEntity, BinarySensorEntity):
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: EasyjobCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator)
-        self._entry = entry
+    def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
+        EasyjobCoordinatorEntity.__init__(self, runtime.coordinator, entry)
+        self._runtime = runtime
 
 
 class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
@@ -42,8 +43,8 @@ class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:cloud-check-outline"
 
-    def __init__(self, coordinator: EasyjobCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
+    def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
+        super().__init__(runtime, entry)
         self._attr_unique_id = f"{entry.entry_id}_connected"
 
     @property
@@ -54,17 +55,19 @@ class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
 class EasyjobWorktimeActiveBinarySensor(_BaseEasyjobBinarySensor):
     _attr_name = "Zeiterfassung aktiv"
 
-    def __init__(self, coordinator: EasyjobCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
+    def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
+        super().__init__(runtime, entry)
         self._attr_unique_id = f"{entry.entry_id}_worktime_active"
 
     def _work_time_raw(self) -> Any:
         data = self.coordinator.data
         if data is None:
             return None
+
         # Falls mal dict statt EasyjobData
         if isinstance(data, dict):
             return data.get("work_time") or data.get("CurrentWorkTime")
+
         return getattr(data, "work_time", None)
 
     @property
@@ -73,5 +76,4 @@ class EasyjobWorktimeActiveBinarySensor(_BaseEasyjobBinarySensor):
 
     @property
     def icon(self) -> str:
-        # on = läuft, off = nicht aktiv
         return "mdi:clock-check" if self.is_on else "mdi:clock-outline"

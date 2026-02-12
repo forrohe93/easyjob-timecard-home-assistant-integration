@@ -4,40 +4,40 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import EntityCategory
 
+from . import RuntimeData
 from .const import DOMAIN
-from .coordinator import EasyjobCoordinator
-from .entity import EasyjobBaseEntity
+from .entity import EasyjobCoordinatorEntity
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: EasyjobCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    client = hass.data[DOMAIN][entry.entry_id]["client"]
-    async_add_entities([EasyjobResourceStateTypeSelect(hass, coordinator, entry, client)])
+    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+
+    async_add_entities(
+        [EasyjobResourceStateTypeSelect(runtime, entry)],
+        update_before_add=True,
+    )
 
 
-class EasyjobResourceStateTypeSelect(CoordinatorEntity[EasyjobCoordinator], SelectEntity, EasyjobBaseEntity):
-    _attr_has_entity_name = True
+class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, SelectEntity):
     _attr_name = "Ressourcenstatus"
     _attr_icon = "mdi:clipboard-text-outline"
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
         self,
-        hass: HomeAssistant,
-        coordinator: EasyjobCoordinator,
+        runtime: RuntimeData,
         entry: ConfigEntry,
-        client,
     ) -> None:
-        super().__init__(coordinator)
-        self.hass = hass
-        self._entry = entry
-        self._client = client
+        EasyjobCoordinatorEntity.__init__(self, runtime.coordinator, entry)
+
+        self._runtime = runtime
+        self._client = runtime.client
 
         self._attr_unique_id = f"{entry.entry_id}_resource_state_type"
 
@@ -45,21 +45,11 @@ class EasyjobResourceStateTypeSelect(CoordinatorEntity[EasyjobCoordinator], Sele
         self._options: list[str] = []
         self._current: str | None = None
 
-        # WICHTIG: options muss beim Add bereits existieren
+        # HA erwartet options beim Hinzufügen
         self._attr_options = []
 
     @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": f"Easyjob ({self._entry.data.get('username','user')})",
-            "manufacturer": "protonic",
-            "model": "easyjob Timecard",
-        }
-
-    @property
     def options(self) -> list[str]:
-        # SelectEntity erwartet zwingend options
         return self._options
 
     @property
@@ -81,8 +71,6 @@ class EasyjobResourceStateTypeSelect(CoordinatorEntity[EasyjobCoordinator], Sele
         }
 
         self._options = list(self._caption_to_id.keys())
-
-        # Zusätzlich _attr_options aktualisieren (HA nutzt je nach Version beides)
         self._attr_options = self._options
 
         if self._options and self._current not in self._options:
@@ -93,11 +81,14 @@ class EasyjobResourceStateTypeSelect(CoordinatorEntity[EasyjobCoordinator], Sele
     async def async_select_option(self, option: str) -> None:
         if option not in self._caption_to_id:
             return
+
         self._current = option
         self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self):
         return {
-            "id_resource_state_type": self._caption_to_id.get(self._current) if self._current else None
+            "id_resource_state_type": self._caption_to_id.get(self._current)
+            if self._current
+            else None
         }

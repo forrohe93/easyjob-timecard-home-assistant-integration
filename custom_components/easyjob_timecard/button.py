@@ -1,18 +1,26 @@
 from __future__ import annotations
 
 import logging
+
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from . import RuntimeData
 from .const import DOMAIN
 from .entity import EasyjobBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     async_add_entities([EasyjobStartButton(hass, entry), EasyjobStopButton(hass, entry)])
+
 
 class _BaseEasyjobButton(EasyjobBaseEntity, ButtonEntity):
     _attr_has_entity_name = True
@@ -20,16 +28,21 @@ class _BaseEasyjobButton(EasyjobBaseEntity, ButtonEntity):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
-        self._entry = entry 
+        self._entry = entry
         self._username = entry.data.get("username", "user")
 
     @property
+    def _runtime(self) -> RuntimeData:
+        return self.hass.data[DOMAIN][self.entry.entry_id]
+
+    @property
     def _client(self):
-        return self.hass.data[DOMAIN][self.entry.entry_id]["client"]
+        return self._runtime.client
 
     @property
     def _coordinator(self):
-        return self.hass.data[DOMAIN][self.entry.entry_id]["coordinator"]
+        return self._runtime.coordinator
+
 
 class EasyjobStartButton(_BaseEasyjobButton):
     _attr_name = "Start"
@@ -43,6 +56,7 @@ class EasyjobStartButton(_BaseEasyjobButton):
         _LOGGER.debug("Start pressed for entry_id=%s", self.entry.entry_id)
         await self._client.async_start()
         await self._coordinator.async_request_refresh()
+
 
 class EasyjobStopButton(_BaseEasyjobButton):
     _attr_name = "Stop"

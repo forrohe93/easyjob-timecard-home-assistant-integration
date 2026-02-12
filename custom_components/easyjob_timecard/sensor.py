@@ -4,11 +4,11 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from . import RuntimeData
 from .const import DOMAIN
-from .coordinator import EasyjobCoordinator
-from .entity import EasyjobBaseEntity
+from .entity import EasyjobCoordinatorEntity
+
 
 SENSORS = [
     ("holidays", "Holidays", "days", lambda d: d.holidays),
@@ -26,39 +26,39 @@ ICONS: dict[str, str] = {
     "work_time": "mdi:clock-outline",
 }
 
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: EasyjobCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    username = entry.data.get("username", "user")
+    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
-        EasyjobSensor(coordinator, entry, username, key, name, unit, getter)
+        EasyjobSensor(runtime, entry, key, name, unit, getter)
         for (key, name, unit, getter) in SENSORS
     ]
-    async_add_entities(entities)
 
-class EasyjobSensor(EasyjobBaseEntity, CoordinatorEntity, SensorEntity):
-    _attr_has_entity_name = True
+    async_add_entities(entities, update_before_add=True)
 
+
+class EasyjobSensor(EasyjobCoordinatorEntity, SensorEntity):
     def __init__(
         self,
-        coordinator: EasyjobCoordinator,
+        runtime: RuntimeData,
         entry: ConfigEntry,
-        username: str,
         key: str,
         name: str,
         unit: str | None,
         getter,
     ) -> None:
-        super().__init__(coordinator)
-        self._entry = entry
+        EasyjobCoordinatorEntity.__init__(self, runtime.coordinator, entry)
+
         self._getter = getter
         self._key = key
+
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_name = f"{username} {name}"
+        self._attr_name = name
         self._attr_native_unit_of_measurement = unit
 
     @property
@@ -68,7 +68,6 @@ class EasyjobSensor(EasyjobBaseEntity, CoordinatorEntity, SensorEntity):
             return None
 
         value = self._getter(data)
-
         if value is None:
             return None
 
@@ -77,7 +76,6 @@ class EasyjobSensor(EasyjobBaseEntity, CoordinatorEntity, SensorEntity):
             return int(value)
 
         return value
-
 
     @property
     def icon(self) -> str | None:

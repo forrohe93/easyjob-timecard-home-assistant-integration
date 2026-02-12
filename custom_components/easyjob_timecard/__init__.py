@@ -1,5 +1,9 @@
 ﻿from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
+from typing import Any
+
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
@@ -22,8 +26,6 @@ from .const import (
     CONF_VERIFY_SSL,
 )
 
-import logging
-
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_RESOURCE_STATE = "set_resource_state"
@@ -35,6 +37,14 @@ SERVICE_SET_RESOURCE_STATE_SCHEMA = vol.Schema(
         vol.Required("end"): cv.datetime,
     }
 )
+
+_WS_REGISTERED_KEY = "ws_registered"
+
+
+@dataclass
+class RuntimeData:
+    client: EasyjobClient
+    coordinator: EasyjobCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -52,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {"client": client, "coordinator": coordinator}
+    hass.data[DOMAIN][entry.entry_id] = RuntimeData(client=client, coordinator=coordinator)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -69,38 +79,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             schema=SERVICE_SET_RESOURCE_STATE_SCHEMA,
         )
 
-    # WebSocket command registrieren, damit Aufrufer ein Ergebnis zurückerhalten
-    @websocket_api.async_response
-    @websocket_api.require_admin
-    @websocket_api.websocket_command({
-        "type": "easyjob_timecard/set_resource",
-        "device_id": str,
-        "start": str,
-        "end": str,
-    })
-    async def ws_set_resource(hass, connection, msg):
-        try:
-            start_dt = dt_util.parse_datetime(msg["start"])
-            end_dt = dt_util.parse_datetime(msg["end"])
-            result = await _perform_set_resource_state(hass, msg["device_id"], start_dt, end_dt)
-            connection.send_result(msg["id"], {"result": result})
-        except Exception as err:
-            _LOGGER.exception("WebSocket set_resource failed: %s", err)
-            connection.send_error(msg["id"], "error", str(err))
+    # WebSocket command nur einmal global registrieren
+    domain_state: dict[str, Any] = hass.data[DOMAIN]
+    if not domain_state.get(_WS_REGISTERED_KEY):
+        domain_state[_WS_REGISTERED_KEY] = True
 
-    websocket_api.async_register_command(hass, ws_set_resource)
+        @websocket_api.async_response
+        @websocket_api.require_admin
+        @websocket_api.websocket_command(
+            {
+                "type": "easyjob_timecard/set_resource",
+                "device_id": str,
+                "start": str,
+                "end": str,
+            }
+        )
+        async def ws_set_resource(hass, connection, msg):
+            try:
+                start_dt = dt_util.parse_datetime(msg["start"])
+                end_dt = dt_util.parse_datetime(msg["end"])
+                result = await _perform_set_resource_state(
+                    hass, msg["device_id"], start_dt, end_dt
+                )
+                connection.send_result(msg["id"], {"result": result})
+            except Exception as err:
+                _LOGGER.exception("WebSocket set_resource failed: %s", err)
+                connection.send_error(msg["id"], "error", str(err))
+
+        websocket_api.async_register_command(hass, ws_set_resource)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
+    if unload_ok and DOMAIN in hass.data:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
 
 
-async def _perform_set_resource_state(hass: HomeAssistant, device_id: str, start_dt, end_dt) -> any:
+async def _perform_set_resource_state(
+    hass: HomeAssistant, device_id: str, start_dt, end_dt
+) -> Any:
     """Kernfunktion, die den Ressourcenstatus setzt und das API-Result zurückgibt."""
     dev_reg = dr.async_get(hass)
     ent_reg = er.async_get(hass)
@@ -119,8 +139,9 @@ async def _perform_set_resource_state(hass: HomeAssistant, device_id: str, start
     if DOMAIN not in hass.data or entry_id not in hass.data[DOMAIN]:
         raise ValueError("Config Entry der Integration nicht geladen (hass.data).")
 
-    client: EasyjobClient = hass.data[DOMAIN][entry_id]["client"]
-    coordinator: EasyjobCoordinator = hass.data[DOMAIN][entry_id]["coordinator"]
+    runtime: RuntimeData = hass.data[DOMAIN][entry_id]
+    client = runtime.client
+    coordinator = runtime.coordinator
 
     # Select-Entity auf diesem Device finden (domain=select, platform=easyjob_timecard)
     select_entity_id: str | None = None
@@ -192,5 +213,3 @@ async def _handle_set_resource_state(hass: HomeAssistant, call: ServiceCall) -> 
     except Exception as err:
         _LOGGER.exception("Fehler beim Setzen des Ressourcenstatus: %s", err)
         raise
-
-    return result

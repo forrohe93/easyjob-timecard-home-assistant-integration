@@ -4,103 +4,85 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from . import RuntimeData
 from .const import DOMAIN
-from .coordinator import EasyjobCoordinator
-from .entity import EasyjobBaseEntity
+from .entity import EasyjobCoordinatorEntity
+from .util import minutes_to_human
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: EasyjobCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    async_add_entities([EasyjobWorktimeSwitch(hass, coordinator, entry)])
+    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+
+    async_add_entities(
+        [EasyjobWorktimeSwitch(runtime, entry)],
+        update_before_add=True,
+    )
 
 
-class EasyjobWorktimeSwitch(EasyjobBaseEntity, CoordinatorEntity[EasyjobCoordinator], SwitchEntity):
-    _attr_has_entity_name = True
+class EasyjobWorktimeSwitch(EasyjobCoordinatorEntity, SwitchEntity):
     _attr_name = "Zeiterfassung"
-    _attr_icon = "mdi:clock-check-outline"
 
-    def __init__(self, hass: HomeAssistant, coordinator: EasyjobCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator)
-        self._hass = hass
-        self._entry = entry
-        self._client = hass.data[DOMAIN][entry.entry_id]["client"]
+    def __init__(
+        self,
+        runtime: RuntimeData,
+        entry: ConfigEntry,
+    ) -> None:
+        EasyjobCoordinatorEntity.__init__(self, runtime.coordinator, entry)
+
+        self._runtime = runtime
+        self._client = runtime.client
+
         self._attr_unique_id = f"{entry.entry_id}_worktime_switch"
-
 
     @property
     def available(self) -> bool:
-        # gleiches Verhalten wie deine anderen Coordinator-Entities
         return bool(self.coordinator.last_update_success)
-    
+
     @property
     def icon(self) -> str:
         return "mdi:clock-check" if self.is_on else "mdi:clock-outline"
 
-
     @property
     def is_on(self) -> bool:
         """
-        ECHTER Status aus der API:
+        Echter Status aus der API:
         - work_time == None -> aus
-        - work_time != None (JSON Array) -> an
+        - work_time != None -> an
         """
         data = self.coordinator.data
         if data is None:
             return False
-        # robust: falls work_time mal als Attribut fehlt
-        work_time = getattr(data, "work_time", None)
-        return work_time is not None
-    
+
+        return getattr(data, "work_time", None) is not None
+
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data
+        minutes = getattr(data, "work_minutes", None) if data is not None else None
 
-        minutes = None
-        if data is not None:
-            minutes = getattr(data, "work_minutes", None)
-
-            # robust: falls float kommt
-            if isinstance(minutes, float):
-                minutes = int(minutes)
+        if isinstance(minutes, float):
+            minutes = int(minutes)
 
         return {
             "work_minutes": minutes,
-            "work_minutes_human": _minutes_to_human(minutes),
+            "work_minutes_human": minutes_to_human(minutes),
         }
 
-
     async def async_turn_on(self, **kwargs) -> None:
-        # Wenn schon an, nichts tun (verhindert Doppelklick-Fehler)
         if self.is_on:
             return
+
         await self._client.async_start()
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
-        # Wenn schon aus, nichts tun
         if not self.is_on:
             return
+
         await self._client.async_stop()
         await self.coordinator.async_request_refresh()
-
-def _minutes_to_human(minutes: int | None) -> str | None:
-    if minutes is None:
-        return None
-    if minutes < 0:
-        return None
-
-    h = minutes // 60
-    m = minutes % 60
-
-    parts: list[str] = []
-    if h:
-        parts.append(f"{h} h")
-    # Minuten immer anzeigen (auch bei 0), damit z.B. "6 h 0 m" möglich ist
-    parts.append(f"{m} m")
-
-    return " ".join(parts)
