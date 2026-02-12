@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from datetime import date
+from .const import DEFAULT_FILTERED_IDT
 
 import aiohttp
 
@@ -178,13 +179,25 @@ class EasyjobClient:
         url = f"{self._base_url}/api.json/Timecard/CloseWorkTime"
         await self._request("POST", url)
     
-    async def async_fetch_calendar(self, start: date, end: date) -> list[dict[str, Any]]:
+    async def async_fetch_calendar(
+        self,
+        start: date,
+        end: date,
+        filtered_idt: list[int] | None = None,
+    ) -> list[dict[str, Any]]:
         """Fetch calendar items from easyjob resource plan."""
         days = max(1, (end - start).days)
-        startdate = start.strftime("%Y-%m-%d") 
+        startdate = start.strftime("%Y-%m-%d")
         url = f"{self._base_url}/api.json/dashboard/calendar/?days={days}&startdate={startdate}"
         payload = await self._request("GET", url)
-        return payload or []
+        items: list[dict[str, Any]] = payload or []
+
+        # Wenn None übergeben wird, nutzen wir Default-Liste (zukunftssicher)
+        deny = DEFAULT_FILTERED_IDT if filtered_idt is None else filtered_idt
+        if not deny:
+            return items
+
+        return [it for it in items if it.get("IdT") not in deny]
 
     _idaddress: int | None = None
 

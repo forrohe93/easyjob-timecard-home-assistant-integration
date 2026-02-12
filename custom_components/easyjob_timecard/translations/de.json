@@ -1,9 +1,42 @@
 {
   "config": {
+    "step": {
+      "user": {
+        "title": "easyjob Timecard einrichten",
+        "description": "Gib deine easyjob Verbindungsdaten ein.",
+        "data": {
+          "base_url": "easyjob URL",
+          "username": "Benutzername",
+          "password": "Kennwort",
+          "verify_ssl": "SSL-Zertifikat prüfen"
+        },
+        "data_description": {
+          "base_url": "Format: https://easyjob.example.com"
+        }
+      }
+    },
     "error": {
+      "invalid_auth": "Login fehlgeschlagen. Bitte URL/Benutzer/Kennwort prüfen.",
       "auth_failed": "Login fehlgeschlagen. Bitte URL/Benutzer/Kennwort prüfen.",
-      "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen.",
-      "not_timecard_user": "User is not a Timecard user."
+      "not_timecard_user": "Der Benutzer ist kein Timecard-User.",
+      "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "easyjob Timecard Einstellungen",
+        "description": "Passe deine Verbindungseinstellungen an.",
+        "data": {
+          "base_url": "easyjob URL",
+          "username": "Benutzername",
+          "password": "Kennwort",
+          "verify_ssl": "SSL-Zertifikat prüfen"
+        },
+        "data_description": {
+          "base_url": "Format: https://easyjob.example.com"
+        }
+      }
     }
   }
 }

@@ -8,9 +8,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_FILTERED_IDT, DEFAULT_FILTERED_IDT
 from .coordinator import EasyjobCoordinator
-
 
 DEFAULT_LOOKAHEAD_DAYS = 30
 
@@ -40,6 +39,9 @@ class EasyjobResourcePlanCalendar(CalendarEntity):
 
         self._event: CalendarEvent | None = None
         self._event_color: str | None = None  # <- nur ein HEX Wert
+        self._filtered_idt: list[int] = list(
+            entry.options.get(CONF_FILTERED_IDT, DEFAULT_FILTERED_IDT)
+        )
 
     @property
     def device_info(self):
@@ -73,7 +75,7 @@ class EasyjobResourcePlanCalendar(CalendarEntity):
         start = now.date()
         end = (now + timedelta(days=DEFAULT_LOOKAHEAD_DAYS)).date()
 
-        items = await self._client.async_fetch_calendar(start, end)
+        items = await self._client.async_fetch_calendar(start, end, self._filtered_idt)
 
         tz = dt_util.get_time_zone(self.hass.config.time_zone)
         parsed: list[tuple[CalendarEvent, str | None]] = []
@@ -133,7 +135,11 @@ class EasyjobResourcePlanCalendar(CalendarEntity):
         (Hier liefern wir Events zurück; Farbe wird NICHT als Mapping gespeichert,
         sondern nur für das aktuelle 'event' in async_update.)
         """
-        items = await self._client.async_fetch_calendar(start_date.date(), end_date.date())
+        items = await self._client.async_fetch_calendar(
+            start_date.date(),
+            end_date.date(),
+            self._filtered_idt,
+        )
 
         tz = dt_util.get_time_zone(hass.config.time_zone)
         events: list[CalendarEvent] = []
