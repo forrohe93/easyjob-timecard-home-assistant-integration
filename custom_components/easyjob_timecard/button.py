@@ -7,28 +7,21 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
+from .entity import EasyjobBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     async_add_entities([EasyjobStartButton(hass, entry), EasyjobStopButton(hass, entry)])
 
-class _BaseEasyjobButton(ButtonEntity):
+class _BaseEasyjobButton(EasyjobBaseEntity, ButtonEntity):
     _attr_has_entity_name = True
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
+        self._entry = entry 
         self._username = entry.data.get("username", "user")
-
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self.entry.entry_id)},
-            "name": f"Easyjob ({self._username})",
-            "manufacturer": "protonic",
-            "model": "easyjob Timecard",
-        }
 
     @property
     def _client(self):

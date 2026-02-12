@@ -1,6 +1,10 @@
 from homeassistant.const import Platform
 
 DOMAIN = "easyjob_timecard"
+NAME = "easyjob Timecard"
+MANUFACTURER = "protonic"
+
+
 PLATFORMS = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,

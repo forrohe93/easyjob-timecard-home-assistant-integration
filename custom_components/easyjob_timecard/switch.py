@@ -8,7 +8,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import EasyjobCoordinator
-
+from .entity import EasyjobBaseEntity
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -19,7 +19,7 @@ async def async_setup_entry(
     async_add_entities([EasyjobWorktimeSwitch(hass, coordinator, entry)])
 
 
-class EasyjobWorktimeSwitch(CoordinatorEntity[EasyjobCoordinator], SwitchEntity):
+class EasyjobWorktimeSwitch(EasyjobBaseEntity, CoordinatorEntity[EasyjobCoordinator], SwitchEntity):
     _attr_has_entity_name = True
     _attr_name = "Zeiterfassung"
     _attr_icon = "mdi:clock-check-outline"
@@ -31,14 +31,6 @@ class EasyjobWorktimeSwitch(CoordinatorEntity[EasyjobCoordinator], SwitchEntity)
         self._client = hass.data[DOMAIN][entry.entry_id]["client"]
         self._attr_unique_id = f"{entry.entry_id}_worktime_switch"
 
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": f"Easyjob ({self._entry.data.get('username','user')})",
-            "manufacturer": "protonic",
-            "model": "easyjob Timecard",
-        }
 
     @property
     def available(self) -> bool:

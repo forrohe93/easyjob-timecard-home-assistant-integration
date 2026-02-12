@@ -10,6 +10,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, CONF_FILTERED_IDT, DEFAULT_FILTERED_IDT
 from .coordinator import EasyjobCoordinator
+from .entity import EasyjobBaseEntity
 
 DEFAULT_LOOKAHEAD_DAYS = 30
 
@@ -23,7 +24,7 @@ async def async_setup_entry(
     async_add_entities([EasyjobResourcePlanCalendar(hass, coordinator, entry)])
 
 
-class EasyjobResourcePlanCalendar(CalendarEntity):
+class EasyjobResourcePlanCalendar(CalendarEntity, EasyjobBaseEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:calendar"
 

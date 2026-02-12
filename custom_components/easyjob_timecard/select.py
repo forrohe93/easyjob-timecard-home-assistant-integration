@@ -9,7 +9,7 @@ from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
 from .coordinator import EasyjobCoordinator
-
+from .entity import EasyjobBaseEntity
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -21,7 +21,7 @@ async def async_setup_entry(
     async_add_entities([EasyjobResourceStateTypeSelect(hass, coordinator, entry, client)])
 
 
-class EasyjobResourceStateTypeSelect(CoordinatorEntity[EasyjobCoordinator], SelectEntity):
+class EasyjobResourceStateTypeSelect(CoordinatorEntity[EasyjobCoordinator], SelectEntity, EasyjobBaseEntity):
     _attr_has_entity_name = True
     _attr_name = "Ressourcenstatus"
     _attr_icon = "mdi:clipboard-text-outline"

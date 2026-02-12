@@ -11,7 +11,7 @@ from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
 from .coordinator import EasyjobCoordinator
-
+from .entity import EasyjobBaseEntity
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -28,21 +28,12 @@ async def async_setup_entry(
     )
 
 
-class _BaseEasyjobBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class _BaseEasyjobBinarySensor(EasyjobBaseEntity, CoordinatorEntity, BinarySensorEntity):
     _attr_has_entity_name = True
 
     def __init__(self, coordinator: EasyjobCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._entry = entry
-
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": f"Easyjob ({self._entry.data.get('username','user')})",
-            "manufacturer": "protonic",
-            "model": "easyjob Timecard",
-        }
 
 
 class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):

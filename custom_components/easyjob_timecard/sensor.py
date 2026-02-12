@@ -8,6 +8,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import EasyjobCoordinator
+from .entity import EasyjobBaseEntity
 
 SENSORS = [
     ("holidays", "Holidays", "days", lambda d: d.holidays),
@@ -39,7 +40,7 @@ async def async_setup_entry(
     ]
     async_add_entities(entities)
 
-class EasyjobSensor(CoordinatorEntity, SensorEntity):
+class EasyjobSensor(EasyjobBaseEntity, CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
 
     def __init__(
@@ -81,12 +82,3 @@ class EasyjobSensor(CoordinatorEntity, SensorEntity):
     @property
     def icon(self) -> str | None:
         return ICONS.get(self._key)
-
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": f"Easyjob ({self._entry.data.get('username','user')})",
-            "manufacturer": "protonic",
-            "model": "easyjob Timecard",
-        }
