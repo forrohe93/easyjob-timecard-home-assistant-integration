@@ -1,7 +1,7 @@
 {
   "domain": "easyjob_timecard",
   "name": "easyjob Timecard",
-  "version": "0.8.0",
+  "version": "0.7.1",
   "config_flow": true,
   "documentation": "https://github.com/forrohe93/easyjob-timecard-home-assistant-integration",
   "requirements": [],
