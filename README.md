@@ -24,6 +24,9 @@ Die Integration unterstützt **mehrere Benutzer** (z. B. mehrere Personen im Hau
 
 ## 📦 Installation
 
+### Über HACS
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=forrohe93&repository=easyjob-timecard-home-assistant-integration&category=Integration)
+
 ### Manuell
 
 1. Kopiere den Ordner `easyjob_timecard` nach:
