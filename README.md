@@ -1,46 +1,66 @@
-# easyjob Timecard – Home Assistant Integration
+# easyjob Timecard -- Home Assistant Integration
 
-Diese Custom Integration bindet **protonic easyjob Timecard** und den **easyjob Ressourcenplan (Kalender)** in Home Assistant ein.  
-Damit kannst du deine Arbeitszeit direkt in Home Assistant sehen **und starten/stoppen** – inklusive Kalender-Einträgen wie z. B. **Urlaub** oder **Mobile Office**.
+Diese Custom Integration bindet **protonic easyjob Timecard** und den
+**easyjob Ressourcenplan (Kalender)** in Home Assistant ein. Damit
+kannst du deine Arbeitszeit direkt in Home Assistant sehen **und
+starten/stoppen** -- inklusive Kalender-Einträgen wie z. B. **Urlaub**,
+**Mobile Office** oder **Krank**.
 
-Die Integration unterstützt **mehrere Benutzer** (z. B. mehrere Personen im Haushalt mit derselben Firma).
+Die Integration unterstützt **mehrere Benutzer** (z. B. mehrere Personen
+im Haushalt mit derselben Firma).
 
----
+------------------------------------------------------------------------
 
 ## ✨ Features
 
-- 🔐 Login über easyjob OAuth Token (`/token`)
-- 📊 Arbeitszeit-Sensoren (Minuten werden als **Ganzzahl** angezeigt)
-- ▶️⏹ Start & Stop der Zeiterfassung über Buttons
-- 🔄 Automatische Aktualisierung via DataUpdateCoordinator
-- 🩺 Diagnose-Sensor für Verbindungsstatus (**Verbunden**)
-- 🧩 Binary Sensor: **Zeiterfassung aktiv** (on/off, Icon abhängig vom Status)
-- 🗓️ **Kalender-Entity**: easyjob Ressourcenplan (z. B. Urlaub, Mobile Office)
-  - inkl. Attribut **`event_color`** (HEX-Farbwert des aktuellen/nächsten Events)
-- 🔧 Konfigurierbar über UI (inkl. Passwort ändern & SSL-Verify)
-- 🏠 Volle Home-Assistant-UI-Integration (Config Flow & Options Flow)
+-   🔐 Login über easyjob OAuth Token (`/token`)
+-   📊 Arbeitszeit-Sensoren (Minuten werden als **Ganzzahl** angezeigt)
+-   ▶️⏹ Start & Stop der Zeiterfassung über Buttons
+-   🔄 Automatische Aktualisierung via `DataUpdateCoordinator`
+-   🩺 Diagnose-Sensor für Verbindungsstatus (**Verbunden**)
+-   🧩 Binary Sensor: **Zeiterfassung aktiv** (on/off, Icon abhängig vom
+    Status)
+-   🗓️ **Kalender-Entity**: easyjob Ressourcenplan
+    -   inkl. Attribut **`event_color`** (HEX-Farbwert des
+        aktuellen/nächsten Events)
+    -   Daten werden über den Coordinator gecacht (keine separaten
+        API-Calls pro Kalender-Update)
+-   🆕 **Dynamische Status-Binary-Sensoren**
+    -   Frei auswählbar im Config-/Options-Flow
+    -   Ein Sensor pro ausgewähltem Ressourcenstatus (z. B. Urlaub,
+        Krank, Mobile Office)
+    -   Sensor ist **„Ein"**, wenn der Status aktuell aktiv ist
+    -   Automatische Bereinigung bei Entfernen im Options Flow
+-   🔧 Konfigurierbar über UI (inkl. Passwort ändern & SSL-Verify)
+-   🏠 Volle Home-Assistant-UI-Integration (Config Flow & Options Flow)
 
----
+------------------------------------------------------------------------
 
 ## 📦 Installation
 
 ### Über HACS
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=forrohe93&repository=easyjob-timecard-home-assistant-integration&category=Integration)
+
+[![Open your Home Assistant instance and open a repository inside the
+Home Assistant Community
+Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=forrohe93&repository=easyjob-timecard-home-assistant-integration&category=Integration)
 
 ### Manuell
 
-1. Kopiere den Ordner `easyjob_timecard` nach:
-   ```
-   config/custom_components/
-   ```
+1.  Kopiere den Ordner `easyjob_timecard` nach:
 
-2. Home Assistant **neu starten**
+```{=html}
+<!-- -->
+```
+    config/custom_components/
 
-3. Integration hinzufügen:
-   - **Einstellungen → Geräte & Dienste → Integration hinzufügen**
-   - nach **easyjob Timecard** suchen
+2.  Home Assistant **neu starten**
 
----
+3.  Integration hinzufügen:
+
+    -   **Einstellungen → Geräte & Dienste → Integration hinzufügen**
+    -   nach **easyjob Timecard** suchen
+
+------------------------------------------------------------------------
 
 ## ⚙️ Konfiguration
 
@@ -48,79 +68,124 @@ Die Konfiguration erfolgt **vollständig über die UI**.
 
 ### Benötigte Daten
 
-| Feld | Beschreibung |
-|-----|-------------|
-| easyjob URL | Basis-URL deiner easyjob-Instanz |
-| Benutzername | easyjob Benutzername |
-| Passwort | easyjob Passwort |
-| SSL-Zertifikat prüfen | Deaktivieren bei Self-Signed Zertifikaten |
+  Feld                    Beschreibung
+  ----------------------- -------------------------------------------
+  easyjob URL             Basis-URL deiner easyjob-Instanz
+  Benutzername            easyjob Benutzername
+  Passwort                easyjob Passwort
+  SSL-Zertifikat prüfen   Deaktivieren bei Self-Signed Zertifikaten
 
-👉 Änderungen (z. B. neues Passwort oder SSL-Verify) können später über  
-**Integration → Konfigurieren** vorgenommen werden.
+### Status-Binary-Sensoren auswählen
 
----
+Während der Einrichtung (oder später über **Konfigurieren**) kannst du
+auswählen:
+
+> **„Ressourcenstati für Binärsensoren"**
+
+Für jeden ausgewählten Status wird ein eigener Binary Sensor angelegt.
+
+Beispiel:
+
+-   Urlaub → `binary_sensor.easyjob_<name>_status_active_urlaub`
+-   Mobile Office → eigener Sensor
+-   Krank → eigener Sensor
+
+Wird ein Status später abgewählt:
+
+-   wird die zugehörige Entität automatisch aus Home Assistant entfernt
+-   sie bleibt nicht „unavailable" zurück
+
+------------------------------------------------------------------------
 
 ## 📊 Entitäten
 
 ### Sensoren
 
-| Sensor | Beschreibung |
-|------|-------------|
-| Holidays | Urlaubstage (Zähler) |
-| Work Minutes | Gearbeitete Minuten heute |
-| Work Minutes geplant | Geplante Minuten |
-| Total Work Minutes | Gesamtarbeitszeit |
-| Work Time | Aktuelle laufende WorkTime (falls vorhanden) |
+  Sensor                 Beschreibung
+  ---------------------- ----------------------------------------------
+  Holidays               Urlaubstage (Zähler)
+  Work Minutes           Gearbeitete Minuten heute
+  Work Minutes geplant   Geplante Minuten
+  Total Work Minutes     Gesamtarbeitszeit
+  Work Time              Aktuelle laufende WorkTime (falls vorhanden)
 
 > Hinweis: Minuten-Werte werden als **Ganzzahl** ausgegeben.
 
----
+------------------------------------------------------------------------
 
 ### Binary Sensoren
 
-| Binary Sensor | Bedeutung |
-|--------------|----------|
-| **Verbunden** | Technische Verbindung zur API ok (Diagnose) |
-| **Zeiterfassung aktiv** | Zeiterfassung läuft aktuell (work_time != null) |
+  -----------------------------------------------------------------------
+  Binary Sensor             Bedeutung
+  ------------------------- ---------------------------------------------
+  **Verbunden**             Technische Verbindung zur API ok (Diagnose)
 
----
+  **Zeiterfassung aktiv**   Zeiterfassung läuft aktuell
+
+  **Status aktiv:           Gewählter Ressourcenstatus ist aktuell aktiv
+  `<Name>`{=html}**         
+  -----------------------------------------------------------------------
+
+#### Status-Sensor Logik
+
+Ein Status-Binary-Sensor ist **„Ein"**, wenn:
+
+-   ein entsprechender Eintrag im Ressourcenplan existiert
+-   dessen Zeitraum das aktuelle Datum/Uhrzeit einschließt
+
+Die Zuordnung erfolgt robust über:
+
+-   Status-ID
+-   oder Status-Bezeichnung (Caption)
+
+------------------------------------------------------------------------
 
 ### Buttons
 
-| Button | Aktion |
-|------|-------|
-| Start | Startet die Zeiterfassung |
-| Stop | Beendet die Zeiterfassung |
+  Button   Aktion
+  -------- ---------------------------
+  Start    Startet die Zeiterfassung
+  Stop     Beendet die Zeiterfassung
 
----
+------------------------------------------------------------------------
 
 ### Kalender
 
-| Entity | Beschreibung |
-|-------|-------------|
-| **Ressourcenplan** (`calendar.*`) | Kalender aus `/api.json/dashboard/calendar` (z. B. Urlaub, Mobile Office) |
+  -----------------------------------------------------------------------
+  Entity                         Beschreibung
+  ------------------------------ ----------------------------------------
+  **Ressourcenplan**             Kalender aus
+  (`calendar.*`)                 `/api.json/dashboard/calendar`
+
+  -----------------------------------------------------------------------
 
 **Kalender-Attribute**
-- `event_color`: HEX-Farbwert (z. B. `#FF0000`) des aktuellen/nächsten Events (entspricht dem `event`/State des Kalenders)
 
----
+-   `event_color` → HEX-Farbwert des aktuellen/nächsten Events
+-   zeigt das nächste oder aktuell laufende Event
+
+Der Kalender verwendet den globalen `DataUpdateCoordinator`-Cache. Es
+werden keine separaten API-Aufrufe pro Kalender-Update durchgeführt.
+
+------------------------------------------------------------------------
 
 ## 🧪 Diagnose
 
-Der Binary Sensor **„Verbunden“** ist als *Diagnose-Entity* markiert und erscheint im Geräte-Dialog unter **Diagnose**.
+Der Binary Sensor **„Verbunden"** ist als *Diagnose-Entity* markiert.
 
 Er zeigt an, ob:
-- Authentifizierung erfolgreich war (Token gültig)
-- API erreichbar ist
-- der letzte Datenabruf erfolgreich war
 
----
+-   Authentifizierung erfolgreich war
+-   API erreichbar ist
+-   letzter Datenabruf erfolgreich war
+
+------------------------------------------------------------------------
 
 ## 🖼️ Lovelace Beispielkarten
 
 ### Arbeitszeit (Status + Buttons)
 
-```yaml
+``` yaml
 type: vertical-stack
 cards:
   - type: heading
@@ -132,10 +197,10 @@ cards:
     entities:
       - binary_sensor.easyjob_heiko_connected
       - binary_sensor.easyjob_heiko_worktime_active
+      - binary_sensor.easyjob_heiko_status_active_urlaub
+      - binary_sensor.easyjob_heiko_status_active_mobile_office
       - sensor.easyjob_heiko_work_minutes
-      - sensor.easyjob_heiko_work_minutes_planed
       - sensor.easyjob_heiko_total_work_minutes
-      - sensor.easyjob_heiko_holidays
 
   - type: horizontal-stack
     cards:
@@ -152,55 +217,61 @@ cards:
 
 (Entity-IDs ggf. anpassen)
 
+------------------------------------------------------------------------
+
 ### Ressourcenplan (Kalender)
 
-```yaml
+``` yaml
 type: calendar
 entities:
   - calendar.easyjob_heiko_ressourcenplan
 ```
 
-> Tipp: Das Attribut `event_color` kannst du z. B. in Templates oder Custom Cards verwenden, um Events farblich zu markieren.
-
----
+------------------------------------------------------------------------
 
 ## 🔒 Sicherheit
 
-- Passwörter werden ausschließlich lokal in Home Assistant gespeichert
-- Kommunikation erfolgt über HTTPS (SSL-Verify optional deaktivierbar)
-- Tokens werden automatisch erneuert
+-   Passwörter werden ausschließlich lokal in Home Assistant gespeichert
+-   Kommunikation erfolgt über HTTPS (SSL-Verify optional deaktivierbar)
+-   Tokens werden automatisch erneuert
+-   Keine externen Cloud-Abhängigkeiten
 
----
+------------------------------------------------------------------------
 
 ## 🛠️ Technisches
 
-- Implementiert mit `DataUpdateCoordinator`
-- Async via `aiohttp`
-- Token-Caching mit Ablaufzeit
-- Retry bei 401 (Token Refresh)
-- Kalender: `CalendarEntity` mit `async_update()` + `async_get_events()`
+-   Implementiert mit `DataUpdateCoordinator`
+-   Async via `aiohttp`
+-   Token-Caching mit Ablaufzeit
+-   Retry bei 401 (Token Refresh)
+-   Kalender-Cache mit Lookahead
+-   Dynamische Entity-Erstellung basierend auf Options Flow
+-   Automatische Bereinigung entfernter dynamischer Entities
 
----
+------------------------------------------------------------------------
 
 ## 🚧 Bekannte Einschränkungen
 
-- Keine Offline-Pufferung
-- API-Verfügbarkeit abhängig von easyjob-Server
-- Standard Home-Assistant Kalenderkarte nutzt `event_color` nicht automatisch (für farbige Darstellung ggf. Custom Card nötig)
-- Änderungen in der easyjob API können Anpassungen erfordern
+-   Keine Offline-Pufferung
+-   API-Verfügbarkeit abhängig vom easyjob-Server
+-   Standard Home-Assistant Kalenderkarte nutzt `event_color` nicht
+    automatisch (für farbige Darstellung ggf. Custom Card nötig)
+-   Änderungen in der easyjob API können Anpassungen erfordern
 
----
+------------------------------------------------------------------------
 
 ## 📄 Lizenz
 
 MIT License
 
----
+------------------------------------------------------------------------
 
 ## 🤝 Mitmachen
 
-Pull Requests und Issues sind willkommen 🙂  
+Pull Requests und Issues sind willkommen 🙂
+
 Bitte beschreibe bei Fehlern:
-- Home-Assistant-Version
-- easyjob-Version (falls bekannt)
-- relevante Log-Auszüge
+
+-   Home-Assistant-Version
+-   easyjob-Version (falls bekannt)
+-   relevante Log-Auszüge

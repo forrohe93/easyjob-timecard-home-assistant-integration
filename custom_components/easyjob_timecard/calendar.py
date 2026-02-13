@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -13,7 +13,6 @@ from .const import (
     DOMAIN,
     CONF_FILTERED_IDT,
     DEFAULT_FILTERED_IDT,
-    DEFAULT_LOOKAHEAD_DAYS,
 )
 from .entity import EasyjobBaseEntity
 from .util import parse_datetime
@@ -40,7 +39,6 @@ class EasyjobResourcePlanCalendar(EasyjobBaseEntity, CalendarEntity):
     ) -> None:
         self.hass = hass
         self._runtime = runtime
-        self._client = runtime.client
         self._entry = entry
 
         self._attr_name = "Ressourcenplan"
@@ -119,17 +117,44 @@ class EasyjobResourcePlanCalendar(EasyjobBaseEntity, CalendarEntity):
 
         return parsed
 
-    async def async_update(self) -> None:
-        """Aktualisiert den Kalender-State (nächstes Event) + dessen Farbe."""
-        now = dt_util.now()
-        start = now.date()
-        end = (now + timedelta(days=DEFAULT_LOOKAHEAD_DAYS)).date()
+    def _get_cached_items_filtered(self) -> list[dict[str, Any]]:
+        """Return cached calendar items filtered by IdT denylist from entry options.
 
-        items = await self._client.async_fetch_calendar(
-            start, end, self._filtered_idt
+        IMPORTANT: CONF_FILTERED_IDT is treated as a *denylist* (same semantics as the old API call).
+        """
+        # Options können sich ändern -> beim Update frisch lesen
+        self._filtered_idt = list(
+            self._entry.options.get(CONF_FILTERED_IDT, DEFAULT_FILTERED_IDT)
         )
+
+        items: list[dict[str, Any]] = list(
+            getattr(self._runtime.coordinator, "calendar_items", []) or []
+        )
+
+        deny: set[int] = set()
+        for v in self._filtered_idt or []:
+            try:
+                deny.add(int(v))
+            except Exception:
+                continue
+
+        if not deny:
+            return items
+
+        # Denylist: alles behalten, außer IdT in deny
+        return [it for it in items if it.get("IdT") not in deny]
+
+    async def async_update(self) -> None:
+        """Aktualisiert den Kalender-State (nächstes/aktuelles Event) + dessen Farbe.
+
+        Keine API Calls mehr: Daten kommen aus dem Coordinator-Cache.
+        """
+        now = dt_util.now()
+
+        items = self._get_cached_items_filtered()
         parsed = self._parse_items(items)
 
+        # "upcoming": alles, was noch nicht vorbei ist
         upcoming = [(ev, color) for (ev, color) in parsed if ev.end >= now]
         upcoming.sort(key=lambda t: t[0].start)
 
@@ -144,11 +169,18 @@ class EasyjobResourcePlanCalendar(EasyjobBaseEntity, CalendarEntity):
         start_date: datetime,
         end_date: datetime,
     ) -> list[CalendarEvent]:
-        items = await self._client.async_fetch_calendar(
-            start_date.date(),
-            end_date.date(),
-            self._filtered_idt,
-        )
-
+        """Return events in range (best effort) from coordinator cache."""
+        items = self._get_cached_items_filtered()
         parsed = self._parse_items(items)
-        return [ev for (ev, _color) in parsed]
+
+        # Overlap-Check: Event überschneidet sich mit [start_date, end_date]
+        events: list[CalendarEvent] = []
+        for ev, _color in parsed:
+            if ev.end < start_date:
+                continue
+            if ev.start > end_date:
+                continue
+            events.append(ev)
+
+        events.sort(key=lambda e: e.start)
+        return events

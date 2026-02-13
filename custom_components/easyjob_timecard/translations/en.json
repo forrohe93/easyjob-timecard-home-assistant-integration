@@ -13,6 +13,16 @@
         "data_description": {
           "base_url": "Format: https://easyjob.example.com"
         }
+      },
+      "status": {
+        "title": "Status sensors",
+        "description": "Select resource statuses for which binary sensors should be created.",
+        "data": {
+          "status_binary_sensors": "Resource statuses for binary sensors"
+        },
+        "data_description": {
+          "status_binary_sensors": "A binary sensor is created for each selected status. The sensor is \"On\" when the status is currently active in the resource plan."
+        }
       }
     },
     "error": {
@@ -26,15 +36,17 @@
     "step": {
       "init": {
         "title": "easyjob Timecard settings",
-        "description": "Adjust your connection settings.",
+        "description": "Adjust your connection settings and status sensors.",
         "data": {
           "base_url": "easyjob URL",
           "username": "Username",
           "password": "Password",
-          "verify_ssl": "Verify SSL certificate"
+          "verify_ssl": "Verify SSL certificate",
+          "status_binary_sensors": "Resource statuses for binary sensors"
         },
         "data_description": {
-          "base_url": "Format: https://easyjob.example.com"
+          "base_url": "Format: https://easyjob.example.com",
+          "status_binary_sensors": "A binary sensor is created for each selected status. The sensor is \"On\" when the status is currently active in the resource plan."
         }
       }
     }

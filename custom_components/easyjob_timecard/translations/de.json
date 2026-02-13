@@ -13,6 +13,16 @@
         "data_description": {
           "base_url": "Format: https://easyjob.example.com"
         }
+      },
+      "status": {
+        "title": "Status-Sensoren",
+        "description": "Wähle Ressourcenstati aus, für die Binärsensoren erstellt werden sollen.",
+        "data": {
+          "status_binary_sensors": "Ressourcenstati für Binärsensoren"
+        },
+        "data_description": {
+          "status_binary_sensors": "Für jeden ausgewählten Status wird ein Binärsensor angelegt. Der Sensor ist \"Ein\", wenn der Status im Ressourcenplan aktuell aktiv ist."
+        }
       }
     },
     "error": {
@@ -26,15 +36,17 @@
     "step": {
       "init": {
         "title": "easyjob Timecard Einstellungen",
-        "description": "Passe deine Verbindungseinstellungen an.",
+        "description": "Passe deine Verbindungseinstellungen und Status-Sensoren an.",
         "data": {
           "base_url": "easyjob URL",
           "username": "Benutzername",
           "password": "Kennwort",
-          "verify_ssl": "SSL-Zertifikat prüfen"
+          "verify_ssl": "SSL-Zertifikat prüfen",
+          "status_binary_sensors": "Ressourcenstati für Binärsensoren"
         },
         "data_description": {
-          "base_url": "Format: https://easyjob.example.com"
+          "base_url": "Format: https://easyjob.example.com",
+          "status_binary_sensors": "Für jeden ausgewählten Status wird ein Binärsensor angelegt. Der Sensor ist \"Ein\", wenn der Status im Ressourcenplan aktuell aktiv ist."
         }
       }
     }
