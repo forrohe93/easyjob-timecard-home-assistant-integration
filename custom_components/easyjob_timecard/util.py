@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from homeassistant.util import dt as dt_util
-
+from homeassistant.components import websocket_api
 
 def minutes_to_human(minutes: int | float | None) -> str | None:
     """Convert minutes to a human-readable string like '6 h 0 m'.
@@ -53,3 +53,22 @@ def parse_datetime(value: str | datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt_util.as_utc(dt) if dt.tzinfo is None else dt
+
+
+def parse_ws_datetime(msg: dict, key: str) -> datetime:
+    """Parse and validate a datetime from a websocket message."""
+
+    raw = msg.get(key)
+    dt_obj = dt_util.parse_datetime(raw)
+
+    if dt_obj is None:
+        raise websocket_api.WebSocketError(
+            "invalid_datetime",
+            f"Ungültiges Datumsformat für '{key}'. Erwartet ISO 8601."
+        )
+
+    # Falls keine Zeitzone übergeben wurde → lokale HA-Zeitzone
+    if dt_util.is_naive(dt_obj):
+        dt_obj = dt_util.as_local(dt_obj)
+
+    return dt_obj

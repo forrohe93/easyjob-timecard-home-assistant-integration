@@ -25,7 +25,7 @@ async def async_setup_entry(
 
 
 class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, SelectEntity):
-    _attr_name = "Ressourcenstatus"
+    _attr_translation_key = "resource_state_type"
     _attr_icon = "mdi:clipboard-text-outline"
     _attr_entity_category = EntityCategory.CONFIG
 

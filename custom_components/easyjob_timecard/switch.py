@@ -25,7 +25,7 @@ async def async_setup_entry(
 
 
 class EasyjobWorktimeSwitch(EasyjobCoordinatorEntity, SwitchEntity):
-    _attr_name = "Zeiterfassung"
+    _attr_translation_key = "worktime"
 
     def __init__(
         self,

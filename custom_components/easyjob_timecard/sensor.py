@@ -4,18 +4,20 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.const import UnitOfTime
 
 from . import RuntimeData
 from .const import DOMAIN
 from .entity import EasyjobCoordinatorEntity
 
 
+# (key, native_unit_of_measurement, getter)
 SENSORS = [
-    ("holidays", "Holidays", "days", lambda d: d.holidays),
-    ("total_work_minutes", "Total work minutes", "min", lambda d: d.total_work_minutes),
-    ("work_minutes", "Work minutes", "min", lambda d: d.work_minutes),
-    ("work_minutes_planed", "Work minutes planed", "min", lambda d: d.work_minutes_planed),
-    ("work_time", "Work time", None, lambda d: d.work_time),
+    ("holidays", UnitOfTime.DAYS, lambda d: d.holidays),
+    ("total_work_minutes", UnitOfTime.MINUTES, lambda d: d.total_work_minutes),
+    ("work_minutes", UnitOfTime.MINUTES, lambda d: d.work_minutes),
+    ("work_minutes_planed", UnitOfTime.MINUTES, lambda d: d.work_minutes_planed),
+    ("work_time", None, lambda d: d.work_time),
 ]
 
 ICONS: dict[str, str] = {
@@ -35,8 +37,8 @@ async def async_setup_entry(
     runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
-        EasyjobSensor(runtime, entry, key, name, unit, getter)
-        for (key, name, unit, getter) in SENSORS
+        EasyjobSensor(runtime, entry, key, unit, getter)
+        for (key, unit, getter) in SENSORS
     ]
 
     async_add_entities(entities, update_before_add=True)
@@ -48,7 +50,6 @@ class EasyjobSensor(EasyjobCoordinatorEntity, SensorEntity):
         runtime: RuntimeData,
         entry: ConfigEntry,
         key: str,
-        name: str,
         unit: str | None,
         getter,
     ) -> None:
@@ -58,7 +59,11 @@ class EasyjobSensor(EasyjobCoordinatorEntity, SensorEntity):
         self._key = key
 
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_name = name
+
+        # Übersetzbarer Entity-Name über translations/strings.json + de.json/en.json
+        # Erwartet: entity.sensor.<translation_key>.name
+        self._attr_translation_key = key
+
         self._attr_native_unit_of_measurement = unit
 
     @property

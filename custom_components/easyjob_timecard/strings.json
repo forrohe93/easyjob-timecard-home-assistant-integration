@@ -49,15 +49,16 @@
 
   "entity": {
     "sensor": {
-      "holidays": { "name": "PTO days" },
+      "holidays": { "name": "Holidays" },
       "total_work_minutes": { "name": "Total work minutes" },
       "work_minutes": { "name": "Work minutes" },
       "work_minutes_planed": { "name": "Planned work minutes" },
       "work_time": { "name": "Work time" }
     },
     "binary_sensor": {
-      "connected": { "name": "Connection" },
+      "connected": { "name": "Connected" },
       "worktime_active": { "name": "Work time active" },
+
       "status_active": { "name": "Status active: {caption}" }
     },
     "button": {

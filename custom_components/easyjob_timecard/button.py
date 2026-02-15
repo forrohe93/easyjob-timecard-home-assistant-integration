@@ -45,7 +45,7 @@ class _BaseEasyjobButton(EasyjobBaseEntity, ButtonEntity):
 
 
 class EasyjobStartButton(_BaseEasyjobButton):
-    _attr_name = "Start"
+    _attr_translation_key = "start"
     _attr_icon = "mdi:play"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -59,7 +59,7 @@ class EasyjobStartButton(_BaseEasyjobButton):
 
 
 class EasyjobStopButton(_BaseEasyjobButton):
-    _attr_name = "Stop"
+    _attr_translation_key = "stop"
     _attr_icon = "mdi:stop"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:

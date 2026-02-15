@@ -118,7 +118,7 @@ class _BaseEasyjobBinarySensor(EasyjobCoordinatorEntity, BinarySensorEntity):
 
 
 class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
-    _attr_name = "Verbunden"
+    _attr_translation_key = "connected"
     _attr_device_class = "connectivity"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:cloud-check-outline"
@@ -133,7 +133,7 @@ class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
 
 
 class EasyjobWorktimeActiveBinarySensor(_BaseEasyjobBinarySensor):
-    _attr_name = "Zeiterfassung aktiv"
+    _attr_translation_key = "worktime_active"
 
     def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
         super().__init__(runtime, entry)
@@ -161,6 +161,11 @@ class EasyjobWorktimeActiveBinarySensor(_BaseEasyjobBinarySensor):
 class EasyjobResourceStatusActiveBinarySensor(_BaseEasyjobBinarySensor):
     _attr_icon = "mdi:calendar-check"
 
+    # Option B: übersetzbarer Prefix + dynamischer Caption-Teil via placeholders
+    # Erwartet in translations/strings.json:
+    # entity.binary_sensor.status_active.name = "Status active: {caption}"
+    _attr_translation_key = "status_active"
+
     def __init__(
         self,
         runtime: RuntimeData,
@@ -174,11 +179,13 @@ class EasyjobResourceStatusActiveBinarySensor(_BaseEasyjobBinarySensor):
         self._status_caption = status_caption or None
         self._status_caption_norm = _norm_text(self._status_caption)
 
-        self._attr_name = (
-            f"Status aktiv: {self._status_caption}"
-            if self._status_caption
-            else f"Status aktiv: {self._status_id}"
-        )
+        # KEIN _attr_name setzen, sonst wird die Übersetzung ignoriert
+        # Stattdessen placeholders für {caption} (und optional {id})
+        self._attr_translation_placeholders = {
+            "caption": self._status_caption or str(self._status_id),
+            "id": str(self._status_id),
+        }
+
         self._attr_unique_id = f"{entry.entry_id}_status_active_{self._status_id}"
 
         self._active_item: dict[str, Any] | None = None

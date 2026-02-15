@@ -1,4 +1,6 @@
 {
+  "title": "easyjob Timecard",
+
   "config": {
     "step": {
       "user": {
@@ -32,6 +34,7 @@
       "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen."
     }
   },
+
   "options": {
     "step": {
       "init": {
@@ -48,6 +51,49 @@
           "base_url": "Format: https://easyjob.example.com",
           "status_binary_sensors": "Für jeden ausgewählten Status wird ein Binärsensor angelegt. Der Sensor ist \"Ein\", wenn der Status im Ressourcenplan aktuell aktiv ist."
         }
+      }
+    }
+  },
+
+  "entity": {
+    "sensor": {
+      "holidays": { "name": "Urlaubstage" },
+      "total_work_minutes": { "name": "Gesamtarbeitsminuten" },
+      "work_minutes": { "name": "Arbeitsminuten" },
+      "work_minutes_planed": { "name": "Geplante Arbeitsminuten" },
+      "work_time": { "name": "Arbeitszeit" }
+    },
+    "binary_sensor": {
+      "connected": { "name": "Verbindung" },
+      "worktime_active": { "name": "Zeiterfassung aktiv" },
+      "status_active": { "name": "Status aktiv: {caption}" }
+    },
+    "button": {
+      "start": { "name": "Start" },
+      "stop": { "name": "Stop" }
+    },
+    "switch": {
+      "worktime": { "name": "Zeiterfassung" }
+    },
+    "select": {
+      "resource_state_type": { "name": "Ressourcenstatus" }
+    },
+    "calendar": {
+      "resourceplan": { "name": "Ressourcenplan" }
+    }
+  },
+
+  "services": {
+    "set_resource_state": {
+      "name": "Ressourcenstatus eintragen",
+      "description": "Erstellt einen Ressourcenstatus-Eintrag (z.B. Urlaub, Krank, Mobile Office).",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das easyjob-Gerät (pro Benutzer/Account)."
+        },
+        "start": { "name": "Start" },
+        "end": { "name": "Ende" }
       }
     }
   }

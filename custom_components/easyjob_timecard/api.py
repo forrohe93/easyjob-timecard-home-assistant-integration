@@ -43,11 +43,6 @@ class EasyjobData:
 # ---- Client ----
 
 class EasyjobClient:
-    """easyjob WebApi client.
-
-    Notes (protonic docs):
-    - Always use header `ej-webapi-client: ThirdParty` for full feature access. :contentReference[oaicite:1]{index=1}
-    """
 
     _TOKEN_SAFETY_BUFFER_SECONDS: Final[int] = 60
     _DEFAULT_TIMEOUT_SECONDS: Final[int] = 20

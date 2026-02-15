@@ -17,6 +17,8 @@ from homeassistant.util import dt as dt_util
 
 from .api import EasyjobClient
 from .coordinator import EasyjobCoordinator
+from .util import parse_ws_datetime
+
 from .const import (
     DOMAIN,
     PLATFORMS,
@@ -25,6 +27,7 @@ from .const import (
     CONF_PASSWORD,
     CONF_VERIFY_SSL,
 )
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -99,15 +102,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         async def ws_set_resource(hass, connection, msg):
             try:
-                start_dt = dt_util.parse_datetime(msg["start"])
-                end_dt = dt_util.parse_datetime(msg["end"])
+                start_dt = parse_ws_datetime(msg, "start")
+                end_dt = parse_ws_datetime(msg, "end")
+
+                if end_dt <= start_dt:
+                    raise websocket_api.WebSocketError(
+                        "invalid_range",
+                        "'end' muss nach 'start' liegen."
+                    )
+
                 result = await _perform_set_resource_state(
                     hass, msg["device_id"], start_dt, end_dt
                 )
+
                 connection.send_result(msg["id"], {"result": result})
-            except Exception as err:
-                _LOGGER.exception("WebSocket set_resource failed: %s", err)
-                connection.send_error(msg["id"], "error", str(err))
+
+            except websocket_api.WebSocketError as err:
+                connection.send_error(msg["id"], err.code, err.message)
+
+
 
         websocket_api.async_register_command(hass, ws_set_resource)
 
