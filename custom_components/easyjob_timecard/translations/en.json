@@ -27,7 +27,8 @@
     "error": {
       "invalid_auth": "Invalid authentication",
       "not_timecard_user": "User is not a Timecard user",
-      "unknown": "Unknown error"
+      "unknown": "Unknown error",
+      "already_configured": "There is already a configuration for this user/URL combination."
     }
   },
 

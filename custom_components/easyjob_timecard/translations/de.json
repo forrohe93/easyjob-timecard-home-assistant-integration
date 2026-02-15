@@ -31,7 +31,8 @@
       "invalid_auth": "Login fehlgeschlagen. Bitte URL/Benutzer/Kennwort prüfen.",
       "auth_failed": "Login fehlgeschlagen. Bitte URL/Benutzer/Kennwort prüfen.",
       "not_timecard_user": "Der Benutzer ist kein Timecard-User.",
-      "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen."
+      "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen.",
+      "already_configured": "Für diese Benutzer/URL-Kombination gibt es bereits eine Konfiguration."
     }
   },
 
