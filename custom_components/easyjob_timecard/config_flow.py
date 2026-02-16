@@ -170,11 +170,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             user_input[CONF_USERNAME] = _normalize_username(user_input[CONF_USERNAME])
 
             # ---- Duplicate detection (URL + Username) ----
-            # Check via unique_id AND legacy data fallback -> shows form error (not abort)
+            # Shows form error (instead of abort), and also catches legacy entries.
             if self._is_duplicate_entry(user_input[CONF_BASE_URL], user_input[CONF_USERNAME]):
                 errors["base"] = "already_configured"
             else:
-                # Keep unique_id for good measure (new entries will store it)
+                # Store unique_id for new entries (future-proof)
                 await self.async_set_unique_id(
                     _make_unique_id(user_input[CONF_BASE_URL], user_input[CONF_USERNAME])
                 )
@@ -238,6 +238,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self._config_entry = config_entry
         self._types_map: dict[str, str] = {}
 
+    async def async_step_user(self, user_input=None):
+        """Alias, falls HA statt 'init' den 'user' Step aufruft."""
+        return await self.async_step_init(user_input)
+
     async def _build_client(self, user_input: dict) -> EasyjobClient:
         session = async_get_clientsession(self.hass)
         return EasyjobClient(
@@ -257,4 +261,153 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         except EasyjobNotTimecardUserError:
             errors["base"] = "not_timecard_user"
         except EasyjobAuthError:
-            error
+            errors["base"] = "invalid_auth"
+        except Exception as err:
+            _LOGGER.exception("Unhandled error during %s: %s", log_prefix, err)
+            errors["base"] = "unknown"
+        return errors
+
+    async def _fetch_types_map(self, user_input: dict) -> dict[str, str]:
+        client = await self._build_client(user_input)
+        types = await client.async_get_resource_state_types()
+
+        out: dict[str, str] = {}
+        for t in types or []:
+            cap = t.get("Caption")
+            _id = t.get("IdResourceStateType")
+            if not cap or _id is None:
+                continue
+            try:
+                out[str(int(_id))] = str(cap)
+            except Exception:
+                continue
+
+        return dict(sorted(out.items(), key=lambda kv: kv[1].lower()))
+
+    def _get_saved_status_ids(self) -> list[int]:
+        """Prefer options, fallback to data (older HA / older entries)."""
+        raw = (
+            self._config_entry.options.get(CONF_STATUS_BINARY_SENSORS)
+            or self._config_entry.data.get(CONF_STATUS_BINARY_SENSORS)
+            or DEFAULT_STATUS_BINARY_SENSORS
+        )
+        ids: set[int] = set()
+        for v in raw or []:
+            try:
+                ids.add(int(v))
+            except Exception:
+                continue
+        return sorted(ids)
+
+    def _schema(self, defaults: dict, default_status_ids: list[int]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Required(CONF_BASE_URL, default=defaults.get(CONF_BASE_URL, "")): str,
+                vol.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME, "")): str,
+                vol.Required(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, "")): str,
+                vol.Required(
+                    CONF_VERIFY_SSL,
+                    default=defaults.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                ): bool,
+                vol.Optional(
+                    CONF_STATUS_BINARY_SENSORS,
+                    default=_to_str_list(default_status_ids),
+                ): cv.multi_select(self._types_map),
+            }
+        )
+
+    def _is_duplicate_for_other_entry(self, base_url: str, username: str) -> bool:
+        """True if another entry already uses the same base_url+username."""
+        wanted_uid = _make_unique_id(base_url, username)
+
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.entry_id == self._config_entry.entry_id:
+                continue
+
+            # Prefer unique_id when present
+            if entry.unique_id and entry.unique_id == wanted_uid:
+                return True
+
+            # Fallback for legacy entries without unique_id
+            other_url = _normalize_base_url(str(entry.data.get(CONF_BASE_URL, "")))
+            other_user = _normalize_username(str(entry.data.get(CONF_USERNAME, "")))
+            if _make_unique_id(other_url, other_user) == wanted_uid:
+                return True
+
+        return False
+
+    async def async_step_init(self, user_input=None):
+        errors: dict[str, str] = {}
+
+        # Defaults for credentials: always from entry.data
+        defaults = dict(self._config_entry.data)
+        if CONF_BASE_URL in defaults and isinstance(defaults[CONF_BASE_URL], str):
+            defaults[CONF_BASE_URL] = _normalize_base_url(defaults[CONF_BASE_URL])
+        if CONF_USERNAME in defaults and isinstance(defaults[CONF_USERNAME], str):
+            defaults[CONF_USERNAME] = _normalize_username(defaults[CONF_USERNAME])
+
+        default_status_ids = self._get_saved_status_ids()
+
+        # Build types map using current saved creds
+        try:
+            creds = {
+                CONF_BASE_URL: defaults.get(CONF_BASE_URL, ""),
+                CONF_USERNAME: defaults.get(CONF_USERNAME, ""),
+                CONF_PASSWORD: defaults.get(CONF_PASSWORD, ""),
+                CONF_VERIFY_SSL: defaults.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            }
+            self._types_map = await self._fetch_types_map(creds)
+        except Exception as err:
+            _LOGGER.exception("Failed to fetch resource state types (options): %s", err)
+            self._types_map = {}
+
+        if user_input is not None:
+            user_input = dict(user_input)
+            user_input[CONF_BASE_URL] = _normalize_base_url(user_input[CONF_BASE_URL])
+            user_input[CONF_USERNAME] = _normalize_username(user_input[CONF_USERNAME])
+
+            # ---- Duplicate detection on update (URL + Username) ----
+            if self._is_duplicate_for_other_entry(
+                user_input[CONF_BASE_URL],
+                user_input[CONF_USERNAME],
+            ):
+                errors["base"] = "already_configured"
+            else:
+                errors = await self._validate_input(user_input, "options flow")
+
+            if not errors:
+                # Update entry data (credentials)
+                new_data = dict(self._config_entry.data)
+                new_data.update(
+                    {
+                        CONF_BASE_URL: user_input[CONF_BASE_URL],
+                        CONF_USERNAME: user_input[CONF_USERNAME],
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                        CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
+                    }
+                )
+
+                # Keep unique_id in sync for future duplicate prevention
+                new_unique_id = _make_unique_id(
+                    user_input[CONF_BASE_URL],
+                    user_input[CONF_USERNAME],
+                )
+                self.hass.config_entries.async_update_entry(
+                    self._config_entry,
+                    data=new_data,
+                    unique_id=new_unique_id,
+                )
+
+                status_ids = _normalize_multi_select_to_int_list(
+                    user_input.get(CONF_STATUS_BINARY_SENSORS)
+                )
+                return self.async_create_entry(
+                    title="",
+                    data={CONF_STATUS_BINARY_SENSORS: status_ids},
+                )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self._schema(defaults, default_status_ids),
+            errors=errors,
+        )
