@@ -45,10 +45,15 @@ class EasyjobCoordinator(DataUpdateCoordinator):
         self.calendar_last_updated = None
         self.calendar_last_error: str | None = None
 
+        # Cached Web API version (from GetGlobalWebSettings)
+        self.web_api_version: str | None = None
+        self.web_api_version_last_error: str | None = None
+
     async def _async_update_data(self):
         """Fetch timecard details and refresh cached calendar items.
 
         Details fetch is REQUIRED. Calendar fetch is BEST-EFFORT.
+        Global web settings fetch is BEST-EFFORT (used for sw_version).
         """
         # Always fetch details (core data for existing entities)
         details_task = self.client.async_fetch_details()
@@ -62,9 +67,15 @@ class EasyjobCoordinator(DataUpdateCoordinator):
             filtered_idt=[],  # do NOT apply filtering in the coordinator cache
         )
 
+        # Fetch global web settings to extract WebApiVersion (best-effort)
+        global_settings_task = self.client.async_get_global_web_settings()
+
         try:
-            details_result, calendar_result = await asyncio.gather(
-                details_task, calendar_task, return_exceptions=True
+            details_result, calendar_result, global_settings_result = await asyncio.gather(
+                details_task,
+                calendar_task,
+                global_settings_task,
+                return_exceptions=True,
             )
 
             # Details failures are fatal (integration data is stale/unreliable)
@@ -79,6 +90,17 @@ class EasyjobCoordinator(DataUpdateCoordinator):
                 self.calendar_items = calendar_result or []
                 self.calendar_last_updated = dt_util.utcnow()
                 self.calendar_last_error = None
+
+            # Global settings failures are non-fatal; keep last known version and expose error
+            if isinstance(global_settings_result, Exception):
+                self.web_api_version_last_error = str(global_settings_result)
+                _LOGGER.debug(
+                    "GlobalWebSettings update failed (non-fatal): %s", global_settings_result
+                )
+            else:
+                version = global_settings_result.get("easyjobVersion") if isinstance(global_settings_result, dict) else None
+                self.web_api_version = str(version) if version else None
+                self.web_api_version_last_error = None
 
             return details_result
 

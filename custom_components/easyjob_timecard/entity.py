@@ -19,11 +19,18 @@ class EasyjobBaseEntity:
             return None
 
         username = entry.data.get("username", "user")
+        base_url = entry.data.get("base_url", "user")
+
+        coordinator = getattr(self, "coordinator", None)
+        sw_version = getattr(coordinator, "web_api_version", None) if coordinator else None
+
         return DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Easyjob ({username})",
             manufacturer=MANUFACTURER,
             model=NAME,
+            configuration_url=base_url,
+            sw_version=sw_version or "unknown",
         )
 
 

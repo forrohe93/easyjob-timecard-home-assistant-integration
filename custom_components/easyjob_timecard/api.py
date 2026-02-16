@@ -325,3 +325,10 @@ class EasyjobClient:
         is_tc = ws.get("IsTimeCardUser")
         if is_tc is not True:
             raise EasyjobNotTimecardUserError("User is not Timecard user")
+
+    async def async_get_global_web_settings(self) -> dict[str, Any]:
+        """GET /api.json/Common/GetGlobalWebSettings"""
+        payload = await self._request("GET", "/api.json/Common/GetGlobalWebSettings", auth=True)
+        if not isinstance(payload, dict):
+            raise EasyjobRequestError("GetGlobalWebSettings returned unexpected response.")
+        return payload

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import ast
+import json
+from typing import Any
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -59,12 +63,39 @@ class EasyjobSensor(EasyjobCoordinatorEntity, SensorEntity):
         self._key = key
 
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-
-        # Übersetzbarer Entity-Name über translations/strings.json + de.json/en.json
-        # Erwartet: entity.sensor.<translation_key>.name
         self._attr_translation_key = key
-
         self._attr_native_unit_of_measurement = unit
+
+    def _parse_work_time(self, value: Any) -> dict[str, Any] | None:
+        """work_time kann dict sein oder als String ankommen -> robust parsen."""
+        if value is None:
+            return None
+
+        if isinstance(value, dict):
+            return value
+
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return None
+
+            # 1) echtes JSON
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                pass
+
+            # 2) Python-dict-String wie "{'ID': 1, ...}"
+            try:
+                parsed = ast.literal_eval(s)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                return None
+
+        return None
 
     @property
     def native_value(self):
@@ -76,11 +107,42 @@ class EasyjobSensor(EasyjobCoordinatorEntity, SensorEntity):
         if value is None:
             return None
 
+        # work_time: State soll nur die ID sein (oder unknown via None)
+        if self._key == "work_time":
+            wt = self._parse_work_time(value)
+            if not wt:
+                return None
+
+            work_id = wt.get("ID")
+            if isinstance(work_id, (int, float)):
+                return int(work_id)
+            # Wenn ID fehlt/None/komisch -> unknown
+            return None
+
         # Minuten-Sensoren immer als Ganzzahl
         if isinstance(value, (int, float)):
             return int(value)
 
         return value
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        data = self.coordinator.data
+        if data is None:
+            return None
+
+        value = self._getter(data)
+        if value is None:
+            return None
+
+        if self._key == "work_time":
+            wt = self._parse_work_time(value)
+            if not wt:
+                return None
+            # Alles außer "ID" als Attribute
+            return {k: v for k, v in wt.items() if k != "ID"}
+
+        return None
 
     @property
     def icon(self) -> str | None:

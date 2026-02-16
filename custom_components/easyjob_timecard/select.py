@@ -5,6 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.const import EntityCategory
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import RuntimeData
 from .const import DOMAIN
@@ -24,7 +25,7 @@ async def async_setup_entry(
     )
 
 
-class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, SelectEntity):
+class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, RestoreEntity, SelectEntity):
     _attr_translation_key = "resource_state_type"
     _attr_icon = "mdi:clipboard-text-outline"
     _attr_entity_category = EntityCategory.CONFIG
@@ -58,6 +59,13 @@ class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, SelectEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
+
+        # 1) Letzten Zustand wiederherstellen
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            self._current = last_state.state
+
+        # 2) Optionen laden und nur fallbacken, wenn restored Wert nicht mehr existiert
         await self._refresh_options()
         self.async_write_ha_state()
 
@@ -73,10 +81,13 @@ class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, SelectEntity):
         self._options = list(self._caption_to_id.keys())
         self._attr_options = self._options
 
-        if self._options and self._current not in self._options:
-            self._current = self._options[0]
-        elif not self._options:
+        if not self._options:
             self._current = None
+            return
+
+        # Wenn kein current gesetzt ist oder current nicht mehr existiert -> fallback
+        if self._current not in self._options:
+            self._current = self._options[0]
 
     async def async_select_option(self, option: str) -> None:
         if option not in self._caption_to_id:

@@ -19,21 +19,27 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    async_add_entities([EasyjobStartButton(hass, entry), EasyjobStopButton(hass, entry)])
+    # RuntimeData wird einmal pro Entry geholt und in die Entities injected.
+    # Wenn du später hass.data strukturiert (entries/ws_registered) umbaust,
+    # änderst du nur diese Zeile.
+    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+
+    async_add_entities(
+        [
+            EasyjobStartButton(runtime, entry),
+            EasyjobStopButton(runtime, entry),
+        ]
+    )
 
 
 class _BaseEasyjobButton(EasyjobBaseEntity, ButtonEntity):
     _attr_has_entity_name = True
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        self.hass = hass
+    def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
+        self._runtime = runtime
         self.entry = entry
         self._entry = entry
         self._username = entry.data.get("username", "user")
-
-    @property
-    def _runtime(self) -> RuntimeData:
-        return self.hass.data[DOMAIN][self.entry.entry_id]
 
     @property
     def _client(self):
@@ -48,8 +54,8 @@ class EasyjobStartButton(_BaseEasyjobButton):
     _attr_translation_key = "start"
     _attr_icon = "mdi:play"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
+        super().__init__(runtime, entry)
         self._attr_unique_id = f"{entry.entry_id}_start"
 
     async def async_press(self) -> None:
@@ -62,8 +68,8 @@ class EasyjobStopButton(_BaseEasyjobButton):
     _attr_translation_key = "stop"
     _attr_icon = "mdi:stop"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
+        super().__init__(runtime, entry)
         self._attr_unique_id = f"{entry.entry_id}_stop"
 
     async def async_press(self) -> None:
