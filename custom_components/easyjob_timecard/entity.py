@@ -3,7 +3,14 @@ from __future__ import annotations
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, NAME, MANUFACTURER
+from .const import (
+    DOMAIN,
+    NAME,
+    MANUFACTURER,
+    CONF_USERNAME,
+    CONF_BASE_URL,
+)
+
 
 
 class EasyjobBaseEntity:
@@ -18,14 +25,14 @@ class EasyjobBaseEntity:
         if entry is None:
             return None
 
-        username = entry.data.get("username", "user")
-        base_url = entry.data.get("base_url", "user")
+        username = entry.data.get(CONF_USERNAME, "user")
+        base_url = entry.data.get(CONF_BASE_URL, "user")
 
         coordinator = getattr(self, "coordinator", None)
         sw_version = getattr(coordinator, "web_api_version", None) if coordinator else None
 
         return DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
+            identifiers={(DOMAIN, entry.unique_id or entry.entry_id)},
             name=f"Easyjob ({username})",
             manufacturer=MANUFACTURER,
             model=NAME,

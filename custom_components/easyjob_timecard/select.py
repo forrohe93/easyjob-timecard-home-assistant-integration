@@ -17,7 +17,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime: RuntimeData = hass.data[DOMAIN]["entries"][entry.entry_id]
 
     async_add_entities(
         [EasyjobResourceStateTypeSelect(runtime, entry)],
@@ -40,7 +40,7 @@ class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, RestoreEntity, Se
         self._runtime = runtime
         self._client = runtime.client
 
-        self._attr_unique_id = f"{entry.entry_id}_resource_state_type"
+        self._attr_unique_id = f"{entry.unique_id}_resource_state_type"
 
         self._caption_to_id: dict[str, int] = {}
         self._options: list[str] = []
@@ -68,6 +68,7 @@ class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, RestoreEntity, Se
         # 2) Optionen laden und nur fallbacken, wenn restored Wert nicht mehr existiert
         await self._refresh_options()
         self.async_write_ha_state()
+        self._runtime.resource_state_select_entity_id = self.entity_id
 
     async def _refresh_options(self) -> None:
         items = await self._client.async_get_resource_state_types()
@@ -77,7 +78,8 @@ class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, RestoreEntity, Se
             for i in items
             if i.get("Caption") and i.get("IdResourceStateType") is not None
         }
-
+        # Cache für Services (damit kein API Call pro Service nötig ist)
+        self._runtime.resource_state_caption_to_id = dict(self._caption_to_id)        
         self._options = list(self._caption_to_id.keys())
         self._attr_options = self._options
 

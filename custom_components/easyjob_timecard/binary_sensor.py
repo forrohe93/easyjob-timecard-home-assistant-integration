@@ -39,7 +39,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime: RuntimeData = hass.data[DOMAIN]["entries"][entry.entry_id]
 
     selected_ids = _get_selected_status_ids(entry)
 
@@ -125,7 +125,7 @@ class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
 
     def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
         super().__init__(runtime, entry)
-        self._attr_unique_id = f"{entry.entry_id}_connected"
+        self._attr_unique_id = f"{entry.unique_id}__connected"
 
     @property
     def is_on(self) -> bool:
@@ -137,7 +137,7 @@ class EasyjobWorktimeActiveBinarySensor(_BaseEasyjobBinarySensor):
 
     def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
         super().__init__(runtime, entry)
-        self._attr_unique_id = f"{entry.entry_id}_worktime_active"
+        self._attr_unique_id = f"{entry.unique_id}__worktime_active"
 
     def _work_time_raw(self) -> Any:
         data = self.coordinator.data
@@ -186,7 +186,7 @@ class EasyjobResourceStatusActiveBinarySensor(_BaseEasyjobBinarySensor):
             "id": str(self._status_id),
         }
 
-        self._attr_unique_id = f"{entry.entry_id}_status_active_{self._status_id}"
+        self._attr_unique_id = f"{entry.unique_id}__status_active_{self._status_id}"
 
         self._active_item: dict[str, Any] | None = None
         self._next_item: dict[str, Any] | None = None

@@ -22,7 +22,7 @@ async def async_setup_entry(
     # RuntimeData wird einmal pro Entry geholt und in die Entities injected.
     # Wenn du später hass.data strukturiert (entries/ws_registered) umbaust,
     # änderst du nur diese Zeile.
-    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime: RuntimeData = hass.data[DOMAIN]["entries"][entry.entry_id]
 
     async_add_entities(
         [
@@ -56,7 +56,7 @@ class EasyjobStartButton(_BaseEasyjobButton):
 
     def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
         super().__init__(runtime, entry)
-        self._attr_unique_id = f"{entry.entry_id}_start"
+        self._attr_unique_id = f"{entry.unique_id}_start"
 
     async def async_press(self) -> None:
         _LOGGER.debug("Start pressed for entry_id=%s", self.entry.entry_id)
@@ -70,7 +70,7 @@ class EasyjobStopButton(_BaseEasyjobButton):
 
     def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
         super().__init__(runtime, entry)
-        self._attr_unique_id = f"{entry.entry_id}_stop"
+        self._attr_unique_id = f"{entry.unique_id}_stop"
 
     async def async_press(self) -> None:
         _LOGGER.debug("Stop pressed for entry_id=%s", self.entry.entry_id)

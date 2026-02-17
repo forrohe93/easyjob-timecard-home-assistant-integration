@@ -16,7 +16,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime: RuntimeData = hass.data[DOMAIN]["entries"][entry.entry_id]
 
     async_add_entities(
         [EasyjobWorktimeSwitch(runtime, entry)],

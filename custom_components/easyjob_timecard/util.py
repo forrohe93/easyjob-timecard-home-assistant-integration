@@ -43,16 +43,21 @@ def get_attr(obj: Any, name: str, default: Any = None) -> Any:
 
 
 def parse_datetime(value: str | datetime | None) -> datetime | None:
-    """Parse ISO datetime string into timezone-aware datetime."""
+    """Parse ISO datetime string into timezone-aware UTC datetime."""
     if value is None:
         return None
+
     if isinstance(value, datetime):
         dt = value
     else:
         dt = dt_util.parse_datetime(value)
+
     if dt is None:
         return None
-    return dt_util.as_utc(dt) if dt.tzinfo is None else dt
+
+    # HA: naive wird als UTC interpretiert, aware wird nach UTC konvertiert
+    return dt_util.as_utc(dt)
+
 
 
 def parse_ws_datetime(msg: dict, key: str) -> datetime:

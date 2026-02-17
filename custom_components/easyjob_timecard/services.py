@@ -34,7 +34,9 @@ _WS_REGISTERED_KEY = "ws_registered"
 async def async_register_services(hass: HomeAssistant) -> None:
     """Registriert Services (und optional WS) genau einmal global."""
 
-    domain_state: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    domain_data: dict[str, Any] = hass.data.setdefault(DOMAIN, {"entries": {}, "services": {}})
+    domain_state: dict[str, Any] = domain_data["services"]
+
 
     # --- Service nur einmal global registrieren ---
     if not domain_state.get(_SERVICES_REGISTERED_KEY):
@@ -102,22 +104,28 @@ async def _perform_set_resource_state(
 
     entry_id = config_entry_ids[0]
 
-    if DOMAIN not in hass.data or entry_id not in hass.data[DOMAIN]:
+    domain_data = hass.data.get(DOMAIN)
+    if not domain_data or entry_id not in domain_data.get("entries", {}):
         raise ValueError("Config Entry der Integration nicht geladen (hass.data).")
 
-    runtime: RuntimeData = hass.data[DOMAIN][entry_id]
+    runtime: RuntimeData = domain_data["entries"][entry_id]
+
     client = runtime.client
     coordinator = runtime.coordinator
 
-    # Select-Entity auf diesem Device finden (domain=select, platform=easyjob_timecard)
-    select_entity_id: str | None = None
-    for e in er.async_entries_for_device(ent_reg, device_id):
-        if e.domain == "select" and e.platform == DOMAIN:
-            select_entity_id = e.entity_id
-            break
+    # Select-Entity bevorzugt aus Runtime (wird in select.py gesetzt),
+    # fallback: Entity Registry Scan (z.B. direkt nach Migration/Restore)
+    select_entity_id: str | None = runtime.resource_state_select_entity_id
+
+    if not select_entity_id:
+        for e in er.async_entries_for_device(ent_reg, device_id):
+            if e.domain == "select" and e.platform == DOMAIN:
+                select_entity_id = e.entity_id
+                break
 
     if not select_entity_id:
         raise ValueError("Keine Ressourcenstatus-Select-Entity auf dem Gerät gefunden.")
+
 
     sel_state = hass.states.get(select_entity_id)
     if sel_state is None:
@@ -127,14 +135,20 @@ async def _perform_set_resource_state(
     if not caption or caption in ("unknown", "unavailable"):
         raise ValueError("Ressourcenstatus ist nicht ausgewählt oder nicht verfügbar.")
 
-    types = await client.async_get_resource_state_types()
-    caption_to_id = {
-        t.get("Caption"): int(t.get("IdResourceStateType"))
-        for t in types
-        if t.get("Caption") and t.get("IdResourceStateType") is not None
-    }
+    caption_to_id = runtime.resource_state_caption_to_id
+
+    # Cache leer? -> einmalig von API holen und in Runtime cachen
+    if not caption_to_id:
+        types = await client.async_get_resource_state_types()
+        caption_to_id = {
+            t.get("Caption"): int(t.get("IdResourceStateType"))
+            for t in types
+            if t.get("Caption") and t.get("IdResourceStateType") is not None
+        }
+        runtime.resource_state_caption_to_id = dict(caption_to_id)
 
     type_id = caption_to_id.get(caption)
+
     if not type_id:
         raise ValueError(f"Ressourcenstatus '{caption}' nicht in der API-Liste gefunden.")
 

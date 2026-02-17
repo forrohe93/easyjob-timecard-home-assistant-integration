@@ -23,13 +23,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities,
 ) -> None:
-    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime: RuntimeData = hass.data[DOMAIN]["entries"][entry.entry_id]
     async_add_entities([EasyjobResourcePlanCalendar(hass, runtime, entry)])
 
 
 class EasyjobResourcePlanCalendar(EasyjobBaseEntity, CalendarEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:calendar"
+    _attr_should_poll = False
 
     def __init__(
         self,
@@ -42,7 +43,7 @@ class EasyjobResourcePlanCalendar(EasyjobBaseEntity, CalendarEntity):
         self._entry = entry
 
         self._attr_translation_key = "resourceplan"
-        self._attr_unique_id = f"{entry.entry_id}_resourceplan"
+        self._attr_unique_id = f"{entry.unique_id}_resourceplan"
 
         self._event: CalendarEvent | None = None
         self._event_color: str | None = None
@@ -50,6 +51,22 @@ class EasyjobResourcePlanCalendar(EasyjobBaseEntity, CalendarEntity):
         self._filtered_idt: list[int] = list(
             entry.options.get(CONF_FILTERED_IDT, DEFAULT_FILTERED_IDT)
         )
+
+    async def async_added_to_hass(self) -> None:
+        # CalendarEntity ist auch eine HA Entity -> Basis-Added aufrufen
+        await CalendarEntity.async_added_to_hass(self)
+
+        # Wenn der Coordinator neue Daten hat, Calendar-State neu berechnen
+        self.async_on_remove(
+            self._runtime.coordinator.async_add_listener(self._on_coordinator_update)
+        )
+
+        # beim Hinzufügen einmal initial berechnen
+        self.async_schedule_update_ha_state(True)
+
+    def _on_coordinator_update(self) -> None:
+        self.async_schedule_update_ha_state(True)
+
 
     @property
     def available(self) -> bool:

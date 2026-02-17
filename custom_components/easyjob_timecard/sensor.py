@@ -38,7 +38,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    runtime: RuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime: RuntimeData = hass.data[DOMAIN]["entries"][entry.entry_id]
 
     entities = [
         EasyjobSensor(runtime, entry, key, unit, getter)
@@ -62,7 +62,7 @@ class EasyjobSensor(EasyjobCoordinatorEntity, SensorEntity):
         self._getter = getter
         self._key = key
 
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_unique_id = f"{entry.unique_id}_{key}"
         self._attr_translation_key = key
         self._attr_native_unit_of_measurement = unit
 

@@ -37,8 +37,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = EasyjobCoordinator(hass, client)
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = RuntimeData(client=client, coordinator=coordinator)
+    domain_data = hass.data.setdefault(DOMAIN, {"entries": {}, "services": {}})
+    domain_data["entries"][entry.entry_id] = RuntimeData(client=client, coordinator=coordinator)
+
 
     # Reload entry when options change (important for dynamic entities / filters)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -54,7 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and DOMAIN in hass.data:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        hass.data[DOMAIN].get("entries", {}).pop(entry.entry_id, None)
     return unload_ok
 
 
