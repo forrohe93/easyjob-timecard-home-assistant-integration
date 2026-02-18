@@ -4,10 +4,10 @@ from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import RuntimeData
@@ -39,18 +39,24 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    # RuntimeData comes from __init__.py: hass.data[DOMAIN]["entries"][entry.entry_id]
     runtime: RuntimeData = hass.data[DOMAIN]["entries"][entry.entry_id]
+
+    # Stable base for unique_id (after migration this is entry.unique_id)
+    uid_base = entry.unique_id or entry.entry_id
 
     selected_ids = _get_selected_status_ids(entry)
 
-    # --- CLEANUP: remove deselected dynamic entities from entity registry ---
+    # --- CLEANUP: remove stale/legacy dynamic entities from entity registry ---
     ent_reg = er.async_get(hass)
 
-    # We delete only our dynamic status sensors. Unique_id pattern:
-    # f"{entry.entry_id}_status_active_{status_id}"
-    prefix = f"{entry.entry_id}_status_active_"
+    # Old scheme (pre-migration): f"{entry.entry_id}_status_active_{status_id}"
+    legacy_prefix = f"{entry.entry_id}_status_active_"
+    # New scheme (post-migration): f"{uid_base}_status_active_{status_id}"
+    new_prefix = f"{uid_base}_status_active_"
 
-    to_remove: list[er.RegistryEntry] = []
+    to_remove: list[str] = []
+
     for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
         if reg_entry.domain != "binary_sensor":
             continue
@@ -58,21 +64,26 @@ async def async_setup_entry(
             continue
         if not reg_entry.unique_id:
             continue
-        if not reg_entry.unique_id.startswith(prefix):
+
+        # 1) If we are on the new scheme, purge any legacy-scheme entities unconditionally
+        #    (otherwise they show up as duplicates / unavailable).
+        if uid_base != entry.entry_id and reg_entry.unique_id.startswith(legacy_prefix):
+            to_remove.append(reg_entry.entity_id)
             continue
 
-        # parse status_id from unique_id
-        status_part = reg_entry.unique_id[len(prefix) :]
-        try:
-            status_id = int(status_part)
-        except Exception:
-            continue
+        # 2) For new-scheme dynamic entities, remove those that are deselected.
+        if reg_entry.unique_id.startswith(new_prefix):
+            status_part = reg_entry.unique_id[len(new_prefix) :]
+            try:
+                status_id = int(status_part)
+            except Exception:
+                continue
 
-        if status_id not in selected_ids:
-            to_remove.append(reg_entry)
+            if status_id not in selected_ids:
+                to_remove.append(reg_entry.entity_id)
 
-    for reg_entry in to_remove:
-        ent_reg.async_remove(reg_entry.entity_id)
+    for entity_id in to_remove:
+        ent_reg.async_remove(entity_id)
     # --- END CLEANUP ---
 
     entities: list[BinarySensorEntity] = [
@@ -116,16 +127,21 @@ class _BaseEasyjobBinarySensor(EasyjobCoordinatorEntity, BinarySensorEntity):
         EasyjobCoordinatorEntity.__init__(self, runtime.coordinator, entry)
         self._runtime = runtime
 
+    @property
+    def _uid_base(self) -> str:
+        # Stable base for all entity unique_ids
+        return self._entry.unique_id or self._entry.entry_id
+
 
 class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
-    _attr_translation_key = "connected"
+    _attr_name = "Verbunden"
     _attr_device_class = "connectivity"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:cloud-check-outline"
 
     def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
         super().__init__(runtime, entry)
-        self._attr_unique_id = f"{entry.unique_id}__connected"
+        self._attr_unique_id = f"{self._uid_base}_connected"
 
     @property
     def is_on(self) -> bool:
@@ -133,11 +149,11 @@ class EasyjobConnectedBinarySensor(_BaseEasyjobBinarySensor):
 
 
 class EasyjobWorktimeActiveBinarySensor(_BaseEasyjobBinarySensor):
-    _attr_translation_key = "worktime_active"
+    _attr_name = "Zeiterfassung aktiv"
 
     def __init__(self, runtime: RuntimeData, entry: ConfigEntry) -> None:
         super().__init__(runtime, entry)
-        self._attr_unique_id = f"{entry.unique_id}__worktime_active"
+        self._attr_unique_id = f"{self._uid_base}_worktime_active"
 
     def _work_time_raw(self) -> Any:
         data = self.coordinator.data
@@ -161,11 +177,6 @@ class EasyjobWorktimeActiveBinarySensor(_BaseEasyjobBinarySensor):
 class EasyjobResourceStatusActiveBinarySensor(_BaseEasyjobBinarySensor):
     _attr_icon = "mdi:calendar-check"
 
-    # Option B: übersetzbarer Prefix + dynamischer Caption-Teil via placeholders
-    # Erwartet in translations/strings.json:
-    # entity.binary_sensor.status_active.name = "Status active: {caption}"
-    _attr_translation_key = "status_active"
-
     def __init__(
         self,
         runtime: RuntimeData,
@@ -179,14 +190,14 @@ class EasyjobResourceStatusActiveBinarySensor(_BaseEasyjobBinarySensor):
         self._status_caption = status_caption or None
         self._status_caption_norm = _norm_text(self._status_caption)
 
-        # KEIN _attr_name setzen, sonst wird die Übersetzung ignoriert
-        # Stattdessen placeholders für {caption} (und optional {id})
-        self._attr_translation_placeholders = {
-            "caption": self._status_caption or str(self._status_id),
-            "id": str(self._status_id),
-        }
+        self._attr_name = (
+            f"Status aktiv: {self._status_caption}"
+            if self._status_caption
+            else f"Status aktiv: {self._status_id}"
+        )
 
-        self._attr_unique_id = f"{entry.unique_id}__status_active_{self._status_id}"
+        # Stable unique_id (post-migration)
+        self._attr_unique_id = f"{self._uid_base}_status_active_{self._status_id}"
 
         self._active_item: dict[str, Any] | None = None
         self._next_item: dict[str, Any] | None = None
