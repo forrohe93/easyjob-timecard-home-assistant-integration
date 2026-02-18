@@ -37,7 +37,7 @@ class EasyjobWorktimeSwitch(EasyjobCoordinatorEntity, SwitchEntity):
         self._runtime = runtime
         self._client = runtime.client
 
-        self._attr_unique_id = f"{entry.entry_id}_worktime_switch"
+        self._attr_unique_id = f"{entry.unique_id}_worktime_switch"
 
     @property
     def available(self) -> bool:

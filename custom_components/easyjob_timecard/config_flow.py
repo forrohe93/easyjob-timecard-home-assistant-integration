@@ -71,7 +71,8 @@ def _make_unique_id(base_url: str, username: str) -> str:
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    # Bump version to support entry migrations (entry_id-based identifiers -> unique_id).
+    VERSION = 2
 
     def __init__(self) -> None:
         self._base_input: dict | None = None
@@ -169,28 +170,29 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             user_input[CONF_BASE_URL] = _normalize_base_url(user_input[CONF_BASE_URL])
             user_input[CONF_USERNAME] = _normalize_username(user_input[CONF_USERNAME])
 
-            # ---- Duplicate detection (URL + Username) ----
-            # Shows form error (instead of abort), and also catches legacy entries.
+            # ---- Stable unique_id (base_url + username) ----
+            wanted_uid = _make_unique_id(user_input[CONF_BASE_URL], user_input[CONF_USERNAME])
+
+            # Legacy-safe duplicate detection (also catches entries without unique_id)
             if self._is_duplicate_entry(user_input[CONF_BASE_URL], user_input[CONF_USERNAME]):
-                errors["base"] = "already_configured"
-            else:
-                # Store unique_id for new entries (future-proof)
-                await self.async_set_unique_id(
-                    _make_unique_id(user_input[CONF_BASE_URL], user_input[CONF_USERNAME])
-                )
+                return self.async_abort(reason="already_configured")
 
-                # ---- Validate credentials against backend ----
-                errors = await self._validate_input(user_input, "config flow")
+            # Set unique_id for this flow + abort if an entry is already configured with it
+            await self.async_set_unique_id(wanted_uid)
+            self._abort_if_unique_id_configured()
+
+            # ---- Validate credentials against backend ----
+            errors = await self._validate_input(user_input, "config flow")
+            if not errors:
+                self._base_input = user_input
+                try:
+                    self._types_map = await self._fetch_resource_state_types_map(user_input)
+                except Exception as err:
+                    _LOGGER.exception("Failed to fetch resource state types: %s", err)
+                    errors["base"] = "unknown"
+
                 if not errors:
-                    self._base_input = user_input
-                    try:
-                        self._types_map = await self._fetch_resource_state_types_map(user_input)
-                    except Exception as err:
-                        _LOGGER.exception("Failed to fetch resource state types: %s", err)
-                        errors["base"] = "unknown"
-
-                    if not errors:
-                        return await self.async_step_status()
+                    return await self.async_step_status()
 
         return self.async_show_form(
             step_id="user",

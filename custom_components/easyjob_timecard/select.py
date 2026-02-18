@@ -79,7 +79,7 @@ class EasyjobResourceStateTypeSelect(EasyjobCoordinatorEntity, RestoreEntity, Se
             if i.get("Caption") and i.get("IdResourceStateType") is not None
         }
         # Cache für Services (damit kein API Call pro Service nötig ist)
-        self._runtime.resource_state_caption_to_id = dict(self._caption_to_id)        
+        self._runtime.resource_state_caption_to_id = dict(self._caption_to_id)
         self._options = list(self._caption_to_id.keys())
         self._attr_options = self._options
 
