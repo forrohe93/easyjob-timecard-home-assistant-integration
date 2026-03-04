@@ -1,7 +1,7 @@
 {
   "domain": "easyjob_timecard",
   "name": "easyjob Timecard",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "config_flow": true,
   "integration_type": "hub",
   "loggers": ["custom_components.easyjob_timecard"],
