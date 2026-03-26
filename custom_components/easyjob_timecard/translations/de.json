@@ -10,10 +10,20 @@
           "base_url": "easyjob URL",
           "username": "Benutzername",
           "password": "Kennwort",
-          "verify_ssl": "SSL-Zertifikat prüfen"
+          "verify_ssl": "SSL-Zertifikat prüfen",
+          "api_version": "API-Version"
         },
         "data_description": {
-          "base_url": "Format: https://easyjob.example.com"
+          "base_url": "Format: https://easyjob.example.com",
+          "api_version": "v1 für ältere easyjob-Installationen, v2 für easyjob WebApi 6.0+"
+        }
+      },
+      "reauth_confirm": {
+        "title": "easyjob Timecard erneut anmelden",
+        "description": "Deine easyjob Zugangsdaten sind nicht mehr gültig. Bitte gib sie erneut ein.",
+        "data": {
+          "username": "Benutzername",
+          "password": "Kennwort"
         }
       },
       "status": {
@@ -33,6 +43,9 @@
       "not_timecard_user": "Der Benutzer ist kein Timecard-User.",
       "unknown": "Unbekannter Fehler. Bitte Protokolle prüfen.",
       "already_configured": "Für diese Benutzer/URL-Kombination gibt es bereits eine Konfiguration."
+    },
+    "abort": {
+      "reauth_successful": "Erneute Anmeldung war erfolgreich"
     }
   },
 
@@ -46,6 +59,7 @@
           "username": "Benutzername",
           "password": "Kennwort",
           "verify_ssl": "SSL-Zertifikat prüfen",
+          "api_version": "API-Version",
           "status_binary_sensors": "Ressourcenstati für Binärsensoren"
         },
         "data_description": {

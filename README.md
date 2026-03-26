@@ -11,6 +11,8 @@ Du kannst:
 
 Mehrere Benutzer werden unterstützt.
 
+> **Version 1.0.0** – Erster stabiler Release. Neu: Unterstützung für easyjob WebApi v2, automatischer Reauth-Flow bei ungültigen Zugangsdaten.
+
 ---
 
 ## ✨ Funktionen
@@ -50,6 +52,15 @@ Benötigt werden:
 - Benutzername
 - Passwort
 - Optional: SSL-Zertifikatsprüfung deaktivieren (bei Self-Signed Zertifikaten)
+
+### API-Version auswählen
+
+Bei der Einrichtung kannst du zwischen **v1** und **v2** wählen:
+
+- **v1** – Für ältere easyjob-Installationen. Standard, wenn du dir nicht sicher bist.
+- **v2** – Für aktuelle Installationen ab easyjob WebApi 6.0.
+
+Die Version kann jederzeit über die Einstellungen der Integration geändert werden. Ein Neustart von Home Assistant ist dafür nicht nötig.
 
 ### Status-Sensoren auswählen
 

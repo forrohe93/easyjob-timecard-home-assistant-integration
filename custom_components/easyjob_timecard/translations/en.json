@@ -10,10 +10,20 @@
           "base_url": "easyjob URL",
           "username": "Username",
           "password": "Password",
-          "verify_ssl": "Verify SSL certificate"
+          "verify_ssl": "Verify SSL certificate",
+          "api_version": "API version"
         },
         "data_description": {
-          "base_url": "Format: https://example.com"
+          "base_url": "Format: https://example.com",
+          "api_version": "Select v1 for older easyjob installations, v2 for easyjob WebApi 6.0+"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate easyjob Timecard",
+        "description": "Your easyjob credentials are no longer valid. Please enter them again.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
         }
       },
       "status": {
@@ -29,6 +39,9 @@
       "not_timecard_user": "User is not a Timecard user",
       "unknown": "Unknown error",
       "already_configured": "There is already a configuration for this user/URL combination."
+    },
+    "abort": {
+      "reauth_successful": "Re-authentication was successful"
     }
   },
 
@@ -42,6 +55,7 @@
           "username": "Username",
           "password": "Password",
           "verify_ssl": "Verify SSL certificate",
+          "api_version": "API version",
           "status_binary_sensors": "Resource statuses"
         }
       }

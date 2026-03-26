@@ -8,6 +8,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+PARALLEL_UPDATES = 0  # Coordinator handles all updates
+
 from . import RuntimeData
 from .const import (
     DOMAIN,

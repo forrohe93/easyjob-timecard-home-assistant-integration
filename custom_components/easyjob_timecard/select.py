@@ -7,6 +7,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.const import EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 
+PARALLEL_UPDATES = 0  # Coordinator handles all updates
+
 from . import RuntimeData
 from .const import DOMAIN
 from .entity import EasyjobCoordinatorEntity

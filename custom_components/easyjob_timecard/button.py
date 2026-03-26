@@ -7,6 +7,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+PARALLEL_UPDATES = 0  # Coordinator handles all updates
+
 from . import RuntimeData
 from .const import DOMAIN
 from .entity import EasyjobBaseEntity
@@ -60,7 +62,7 @@ class EasyjobStartButton(_BaseEasyjobButton):
 
     async def async_press(self) -> None:
         _LOGGER.debug("Start pressed for entry_id=%s", self.entry.entry_id)
-        await self._client.async_start()
+        await self._client.async_start_versioned()
         await self._coordinator.async_request_refresh()
 
 
@@ -74,5 +76,5 @@ class EasyjobStopButton(_BaseEasyjobButton):
 
     async def async_press(self) -> None:
         _LOGGER.debug("Stop pressed for entry_id=%s", self.entry.entry_id)
-        await self._client.async_stop()
+        await self._client.async_stop_versioned()
         await self._coordinator.async_request_refresh()

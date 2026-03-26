@@ -10,6 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.const import UnitOfTime
 
+PARALLEL_UPDATES = 0  # Coordinator handles all updates
+
 from . import RuntimeData
 from .const import DOMAIN
 from .entity import EasyjobCoordinatorEntity

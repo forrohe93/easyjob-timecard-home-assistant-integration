@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
@@ -36,6 +36,7 @@ class EasyjobBaseEntity:
             name=f"Easyjob ({username})",
             manufacturer=MANUFACTURER,
             model=NAME,
+            entry_type=DeviceEntryType.SERVICE,
             configuration_url=base_url,
             sw_version=sw_version or "unknown",
         )

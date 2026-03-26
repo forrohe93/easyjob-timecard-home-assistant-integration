@@ -10,6 +10,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+PARALLEL_UPDATES = 0  # Coordinator handles all updates
+
 from . import RuntimeData
 from .const import CONF_STATUS_BINARY_SENSORS, DEFAULT_STATUS_BINARY_SENSORS, DOMAIN
 from .entity import EasyjobCoordinatorEntity

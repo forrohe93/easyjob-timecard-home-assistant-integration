@@ -5,6 +5,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+PARALLEL_UPDATES = 0  # Coordinator handles all updates
+
 from . import RuntimeData
 from .const import DOMAIN
 from .entity import EasyjobCoordinatorEntity
@@ -77,12 +79,12 @@ class EasyjobWorktimeSwitch(EasyjobCoordinatorEntity, SwitchEntity):
         if self.is_on:
             return
 
-        await self._client.async_start()
+        await self._client.async_start_versioned()
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
         if not self.is_on:
             return
 
-        await self._client.async_stop()
+        await self._client.async_stop_versioned()
         await self.coordinator.async_request_refresh()

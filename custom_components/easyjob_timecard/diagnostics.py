@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.redact import async_redact_data
 
-from .const import DOMAIN, CONF_PASSWORD
+from .const import DOMAIN, CONF_PASSWORD, CONF_API_VERSION, DEFAULT_API_VERSION
 from .runtime import RuntimeData
 
 TO_REDACT = {CONF_PASSWORD, "Authorization", "access_token", "refresh_token"}
@@ -24,6 +24,7 @@ async def async_get_config_entry_diagnostics(
             "entry_id": entry.entry_id,
             "unique_id": entry.unique_id,
             "title": entry.title,
+            "api_version": entry.data.get(CONF_API_VERSION, DEFAULT_API_VERSION),
             "data": dict(entry.data),
             "options": dict(entry.options),
             "version": entry.version,

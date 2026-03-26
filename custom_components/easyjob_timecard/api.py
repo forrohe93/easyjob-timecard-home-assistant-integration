@@ -55,6 +55,7 @@ class EasyjobClient:
         password: str,
         verify_ssl: bool = True,
         timeout: int = _DEFAULT_TIMEOUT_SECONDS,
+        api_version: str = "v1",
     ) -> None:
         self._session = session
         self._base_url = base_url.rstrip("/")
@@ -62,6 +63,7 @@ class EasyjobClient:
         self._password = password
         self._verify_ssl = verify_ssl
         self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self.api_version = api_version
 
         self._access_token: str | None = None
         self._token_expires_at: datetime | None = None
@@ -223,7 +225,48 @@ class EasyjobClient:
     # ---------- Public API ----------
 
     async def async_test_auth(self) -> None:
-        await self.async_fetch_details()
+        await self.async_fetch_details_versioned()
+
+    async def async_validate_timecard_user(self) -> None:
+        """Raise if user is not a Timecard user (version-aware)."""
+        if self.api_version == "v2":
+            await self._async_validate_timecard_user_v2()
+        else:
+            await self._async_validate_timecard_user_v1()
+
+    async def _async_validate_timecard_user_v1(self) -> None:
+        ws = await self.async_get_web_settings()
+        if ws.get("IsTimeCardUser") is not True:
+            raise EasyjobNotTimecardUserError("User is not Timecard user")
+
+    async def _async_validate_timecard_user_v2(self) -> None:
+        payload = await self._request("GET", "/api.json/v2/timecard/common/details?light=true", auth=True)
+        id_tc_user = payload.get("IdTimeCardUser")
+        try:
+            if not id_tc_user or int(id_tc_user) == 0:
+                raise EasyjobNotTimecardUserError("User is not Timecard user")
+        except (TypeError, ValueError) as err:
+            raise EasyjobNotTimecardUserError("User is not Timecard user") from err
+
+    async def async_fetch_details_versioned(self, d: str | None = None) -> EasyjobData:
+        """Fetch details using the configured API version."""
+        if self.api_version == "v2":
+            return await self.async_fetch_details_v2(d)
+        return await self.async_fetch_details(d)
+
+    async def async_start_versioned(self) -> None:
+        """Start work time using the configured API version."""
+        if self.api_version == "v2":
+            await self.async_start_v2()
+        else:
+            await self.async_start()
+
+    async def async_stop_versioned(self) -> None:
+        """Stop work time using the configured API version."""
+        if self.api_version == "v2":
+            await self.async_stop_v2()
+        else:
+            await self.async_stop()
 
     async def async_fetch_details(self, d: str | None = None) -> EasyjobData:
         """GET /api.json/Timecard/Details?d (param 'd' optional)."""
@@ -250,6 +293,40 @@ class EasyjobClient:
     async def async_stop(self) -> None:
         """POST /api.json/Timecard/CloseWorkTime"""
         await self._request("POST", "/api.json/Timecard/CloseWorkTime", auth=True)
+
+    # ---------- API v2 ----------
+
+    async def async_fetch_details_v2(self, d: str | None = None) -> EasyjobData:
+        """GET /api.json/v2/timecard/common/details?date=&light=false"""
+        path = "/api.json/v2/timecard/common/details?light=false"
+        if d:
+            path += f"&date={d}"
+        payload = await self._request("GET", path, auth=True)
+
+        # v2 has no CurrentWorkTime field; IdTimeCardWorkTimeCurrent > 0 means active.
+        # Build a dict matching the v1 shape so the work_time sensor works unchanged.
+        id_current = payload.get("IdTimeCardWorkTimeCurrent")
+        try:
+            work_time = str({"ID": int(id_current)}) if id_current and int(id_current) > 0 else None
+        except (TypeError, ValueError):
+            work_time = None
+
+        return EasyjobData(
+            date=payload.get("Date"),
+            holidays=payload.get("Holidays"),
+            total_work_minutes=payload.get("TotalWorkMinutes"),
+            work_minutes=payload.get("WorkMinutes"),
+            work_minutes_planed=payload.get("WorkMinutesPlaned"),
+            work_time=work_time,
+        )
+
+    async def async_start_v2(self) -> None:
+        """POST /api.json/v2/timecard/worktimes/start"""
+        await self._request("POST", "/api.json/v2/timecard/worktimes/start", auth=True)
+
+    async def async_stop_v2(self) -> None:
+        """POST /api.json/v2/timecard/worktimes/close"""
+        await self._request("POST", "/api.json/v2/timecard/worktimes/close", auth=True)
 
     async def async_fetch_calendar(
         self,
@@ -319,12 +396,6 @@ class EasyjobClient:
             raise EasyjobRequestError("GetWebSettings returned unexpected response.")
         return payload
 
-    async def async_validate_timecard_user(self) -> None:
-        """Raise if user is not a Timecard user."""
-        ws = await self.async_get_web_settings()
-        is_tc = ws.get("IsTimeCardUser")
-        if is_tc is not True:
-            raise EasyjobNotTimecardUserError("User is not Timecard user")
 
     async def async_get_global_web_settings(self) -> dict[str, Any]:
         """GET /api.json/Common/GetGlobalWebSettings"""

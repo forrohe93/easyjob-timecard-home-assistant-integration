@@ -10,10 +10,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import EasyjobClient
 from .const import (
+    CONF_API_VERSION,
     CONF_BASE_URL,
     CONF_PASSWORD,
     CONF_USERNAME,
     CONF_VERIFY_SSL,
+    DEFAULT_API_VERSION,
     DOMAIN,
     PLATFORMS,
 )
@@ -107,15 +109,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     session = async_get_clientsession(hass)
 
+    api_version = entry.data.get(CONF_API_VERSION, DEFAULT_API_VERSION)
     client = EasyjobClient(
         session=session,
         base_url=entry.data[CONF_BASE_URL],
         username=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
         verify_ssl=entry.data.get(CONF_VERIFY_SSL, True),
+        api_version=api_version,
     )
 
-    coordinator = EasyjobCoordinator(hass, client)
+    coordinator = EasyjobCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
     domain_data = hass.data.setdefault(DOMAIN, {"entries": {}, "services": {}})

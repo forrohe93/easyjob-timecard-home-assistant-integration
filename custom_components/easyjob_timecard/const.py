@@ -21,6 +21,11 @@ CONF_PASSWORD = "password"
 CONF_VERIFY_SSL = "verify_ssl"
 DEFAULT_VERIFY_SSL = True
 
+CONF_API_VERSION = "api_version"
+API_VERSION_V1 = "v1"
+API_VERSION_V2 = "v2"
+DEFAULT_API_VERSION = API_VERSION_V1
+
 DEFAULT_SCAN_INTERVAL_SECONDS = 60
 
 # Calendar filtering (IdT values)

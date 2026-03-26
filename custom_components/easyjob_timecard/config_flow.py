@@ -12,11 +12,15 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import EasyjobClient, EasyjobAuthError, EasyjobNotTimecardUserError
 from .const import (
     DOMAIN,
+    CONF_API_VERSION,
     CONF_BASE_URL,
     CONF_USERNAME,
     CONF_PASSWORD,
     CONF_VERIFY_SSL,
+    DEFAULT_API_VERSION,
     DEFAULT_VERIFY_SSL,
+    API_VERSION_V1,
+    API_VERSION_V2,
     CONF_STATUS_BINARY_SENSORS,
     DEFAULT_STATUS_BINARY_SENSORS,
 )
@@ -103,6 +107,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             username=user_input[CONF_USERNAME],
             password=user_input[CONF_PASSWORD],
             verify_ssl=user_input[CONF_VERIFY_SSL],
+            api_version=user_input.get(CONF_API_VERSION, DEFAULT_API_VERSION),
         )
 
     async def _validate_input(self, user_input: dict, log_prefix: str) -> dict[str, str]:
@@ -148,6 +153,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_VERIFY_SSL,
                     default=defaults.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                 ): bool,
+                vol.Required(
+                    CONF_API_VERSION,
+                    default=defaults.get(CONF_API_VERSION, DEFAULT_API_VERSION),
+                ): vol.In([API_VERSION_V1, API_VERSION_V2]),
             }
         )
 
@@ -229,6 +238,39 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors={},
         )
 
+    async def async_step_reauth(self, entry_data):
+        """Triggered by HA when an auth error occurs during normal operation."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Show re-authentication form with username and password only."""
+        errors: dict[str, str] = {}
+        entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            new_input = {
+                **entry.data,
+                CONF_USERNAME: _normalize_username(user_input[CONF_USERNAME]),
+                CONF_PASSWORD: user_input[CONF_PASSWORD],
+            }
+            errors = await self._validate_input(new_input, "reauth")
+            if not errors:
+                self.hass.config_entries.async_update_entry(entry, data=new_input)
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_USERNAME, default=entry.data.get(CONF_USERNAME, "")): str,
+                vol.Required(CONF_PASSWORD): str,
+            }
+        )
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=schema,
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
@@ -252,6 +294,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             username=user_input[CONF_USERNAME],
             password=user_input[CONF_PASSWORD],
             verify_ssl=user_input[CONF_VERIFY_SSL],
+            api_version=user_input.get(CONF_API_VERSION, DEFAULT_API_VERSION),
         )
 
     async def _validate_input(self, user_input: dict, log_prefix: str) -> dict[str, str]:
@@ -311,6 +354,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_VERIFY_SSL,
                     default=defaults.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                 ): bool,
+                vol.Required(
+                    CONF_API_VERSION,
+                    default=defaults.get(CONF_API_VERSION, DEFAULT_API_VERSION),
+                ): vol.In([API_VERSION_V1, API_VERSION_V2]),
                 vol.Optional(
                     CONF_STATUS_BINARY_SENSORS,
                     default=_to_str_list(default_status_ids),
@@ -357,6 +404,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_USERNAME: defaults.get(CONF_USERNAME, ""),
                 CONF_PASSWORD: defaults.get(CONF_PASSWORD, ""),
                 CONF_VERIFY_SSL: defaults.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                CONF_API_VERSION: defaults.get(CONF_API_VERSION, DEFAULT_API_VERSION),
             }
             self._types_map = await self._fetch_types_map(creds)
         except Exception as err:
@@ -386,6 +434,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_USERNAME: user_input[CONF_USERNAME],
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
                         CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
+                        CONF_API_VERSION: user_input.get(CONF_API_VERSION, DEFAULT_API_VERSION),
                     }
                 )
 

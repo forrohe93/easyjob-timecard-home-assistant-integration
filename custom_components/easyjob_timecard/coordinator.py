@@ -4,11 +4,12 @@ import asyncio
 from datetime import timedelta
 import logging
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import EasyjobClient
+from .api import EasyjobClient, EasyjobAuthError
 from .const import DEFAULT_LOOKAHEAD_DAYS, DEFAULT_SCAN_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class EasyjobCoordinator(DataUpdateCoordinator):
         self,
         hass: HomeAssistant,
         client: EasyjobClient,
+        entry: ConfigEntry,
         *,
         lookahead_days: int = DEFAULT_LOOKAHEAD_DAYS,
     ) -> None:
@@ -38,6 +40,7 @@ class EasyjobCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL_SECONDS),
         )
         self.client = client
+        self._entry = entry
         self.lookahead_days = lookahead_days
 
         # Cached calendar items (resource plan)
@@ -56,7 +59,7 @@ class EasyjobCoordinator(DataUpdateCoordinator):
         Global web settings fetch is BEST-EFFORT (used for sw_version).
         """
         # Always fetch details (core data for existing entities)
-        details_task = self.client.async_fetch_details()
+        details_task = self.client.async_fetch_details_versioned()
 
         # Fetch calendar for a lookahead window; keep unfiltered here so other features can use it.
         start = dt_util.now().date()
@@ -104,6 +107,8 @@ class EasyjobCoordinator(DataUpdateCoordinator):
 
             return details_result
 
+        except EasyjobAuthError as err:
+            self._entry.async_start_reauth(self.hass)
+            raise UpdateFailed(str(err)) from err
         except Exception as err:
-            # If details failed (or something unexpected), mark update failed.
             raise UpdateFailed(str(err)) from err
