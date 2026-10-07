@@ -6,10 +6,11 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import EasyjobClient, EasyjobAuthError
+from .api import EasyjobClient, EasyjobInvalidCredentialsError
 from .const import DEFAULT_LOOKAHEAD_DAYS, DEFAULT_SCAN_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class EasyjobCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name="easyjob_timecard",
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL_SECONDS),
         )
@@ -107,8 +109,9 @@ class EasyjobCoordinator(DataUpdateCoordinator):
 
             return details_result
 
-        except EasyjobAuthError as err:
-            self._entry.async_start_reauth(self.hass)
-            raise UpdateFailed(str(err)) from err
+        except EasyjobInvalidCredentialsError as err:
+            # ConfigEntryAuthFailed makes HA start the reauth flow and stop scheduled
+            # refreshes (and setup retries) until new credentials are entered.
+            raise ConfigEntryAuthFailed(str(err)) from err
         except Exception as err:
             raise UpdateFailed(str(err)) from err

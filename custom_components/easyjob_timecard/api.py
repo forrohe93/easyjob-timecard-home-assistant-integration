@@ -1,13 +1,17 @@
 ﻿from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone, date
-from typing import Any, Final
+import logging
+from typing import Any, Final, NoReturn
 
 import aiohttp
 
 
 from .const import DEFAULT_FILTERED_IDT
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ---- Exceptions ----
@@ -18,6 +22,18 @@ class EasyjobApiError(Exception):
 
 class EasyjobAuthError(EasyjobApiError):
     """Raised when authentication/token retrieval fails."""
+
+
+class EasyjobLoginRejectedError(EasyjobAuthError):
+    """Raised when the login was rejected (401/403) but retries with backoff are still left."""
+
+
+class EasyjobInvalidCredentialsError(EasyjobAuthError):
+    """Raised when the login keeps being rejected after all retries.
+
+    Unlike other auth errors (network/SSL during login, pending retries), this requires
+    the user to enter new credentials; retrying with the same ones is pointless.
+    """
 
 
 class EasyjobNotTimecardUserError(EasyjobApiError):
@@ -46,6 +62,9 @@ class EasyjobClient:
 
     _TOKEN_SAFETY_BUFFER_SECONDS: Final[int] = 60
     _DEFAULT_TIMEOUT_SECONDS: Final[int] = 20
+    # Wait time before each retry after an auth rejection (401/403). After the last
+    # retry is rejected too, no more logins are attempted and reauth is requested.
+    _AUTH_RETRY_BACKOFF_SECONDS: Final[tuple[int, ...]] = (60, 300, 900)
 
     def __init__(
         self,
@@ -67,6 +86,14 @@ class EasyjobClient:
 
         self._access_token: str | None = None
         self._token_expires_at: datetime | None = None
+        self._token_lock = asyncio.Lock()
+        # Consecutive auth rejections (reset by any successful authenticated request).
+        # Each rejection blocks further logins for a backoff period; once all retries are
+        # used up, the client stops logging in entirely until a reauth reloads the entry
+        # (which creates a new client).
+        self._auth_failures = 0
+        self._login_blocked_until: datetime | None = None
+        self._credentials_rejected = False
 
         self._idaddress: int | None = None
 
@@ -113,7 +140,8 @@ class EasyjobClient:
 
         - Adds required protonic header `ej-webapi-client: ThirdParty`
         - Adds Bearer token if auth=True
-        - Retries once on 401 by forcing a new token
+        - Retries once on 401 by forcing a new token; a 401 with a fresh token counts as
+          auth rejection (see _async_register_auth_rejection)
         - Normalizes errors into Easyjob* exceptions
         """
         url = f"{self._base_url}{path}"
@@ -137,8 +165,8 @@ class EasyjobClient:
                 **kwargs,
             ) as resp:
                 if auth and resp.status == 401:
-                    # refresh token once and retry
-                    token = await self.async_get_token(force=True)
+                    # refresh token once and retry (skipped if another request already refreshed it)
+                    token = await self.async_get_token(force=True, stale_token=token)
                     retry_headers = self._auth_headers(token) | (headers or {})
                     async with self._session.request(
                         method,
@@ -148,17 +176,26 @@ class EasyjobClient:
                         timeout=self._timeout,
                         **kwargs,
                     ) as resp2:
-                        if resp2.status in (401, 403):
-                            raise EasyjobAuthError("Unauthorized (401/403).")
+                        if resp2.status == 401:
+                            await self._async_register_auth_rejection(
+                                "Unauthorized (401) with fresh token", token
+                            )
+                        if resp2.status == 403:
+                            raise EasyjobAuthError("Forbidden (403).")
                         resp2.raise_for_status()
+                        self._auth_failures = 0
                         return await self._read_response(resp2)
 
-                if resp.status in (401, 403) and auth:
-                    raise EasyjobAuthError("Unauthorized (401/403).")
+                if resp.status == 403 and auth:
+                    # Valid token but access denied (e.g. missing permission for this
+                    # endpoint) – not a credentials problem, so no reauth.
+                    raise EasyjobAuthError("Forbidden (403).")
 
                 # Optional: rate limiting could happen; treat as request error
                 # (you can add backoff later if needed)
                 resp.raise_for_status()
+                if auth:
+                    self._auth_failures = 0
                 return await self._read_response(resp)
 
         except aiohttp.ClientConnectorCertificateError as err:
@@ -173,13 +210,80 @@ class EasyjobClient:
 
     # ---------- Token ----------
 
-    async def async_get_token(self, force: bool = False) -> str:
-        """Get and cache Bearer token from /token (x-www-form-urlencoded)."""
-        if not force and self._access_token and self._token_expires_at:
-            if datetime.now(timezone.utc) < (
-                self._token_expires_at - timedelta(seconds=self._TOKEN_SAFETY_BUFFER_SECONDS)
-            ):
-                return self._access_token
+    async def async_get_token(self, force: bool = False, stale_token: str | None = None) -> str:
+        """Get and cache Bearer token from /token (x-www-form-urlencoded).
+
+        Serialized via a lock so parallel requests share a single login.
+        With force=True and stale_token given, a new login is only made if the cached
+        token is still the stale one (i.e. no other request refreshed it meanwhile).
+        """
+        async with self._token_lock:
+            if self._credentials_rejected:
+                raise EasyjobInvalidCredentialsError(
+                    "Credentials were rejected; waiting for reauthentication."
+                )
+
+            if self._login_blocked_until is not None:
+                remaining = (self._login_blocked_until - datetime.now(timezone.utc)).total_seconds()
+                if remaining > 0:
+                    raise EasyjobLoginRejectedError(
+                        f"Login was rejected; next attempt in {int(remaining)}s."
+                    )
+
+            if force and stale_token is not None and self._access_token != stale_token:
+                force = False
+
+            if not force and self._access_token and self._token_expires_at:
+                if datetime.now(timezone.utc) < (
+                    self._token_expires_at - timedelta(seconds=self._TOKEN_SAFETY_BUFFER_SECONDS)
+                ):
+                    return self._access_token
+
+            return await self._async_login()
+
+    async def _async_register_auth_rejection(self, reason: str, token: str | None = None) -> NoReturn:
+        """Count an auth rejection and raise.
+
+        Raises EasyjobLoginRejectedError while retries are left (logins are blocked for the
+        backoff period), then EasyjobInvalidCredentialsError and stops logging in for good.
+        If `token` is given, the rejection only counts if it is still the current token, so
+        parallel requests failing with the same token count once.
+        """
+        async with self._token_lock:
+            self._count_auth_rejection(reason, token)
+
+    def _count_auth_rejection(self, reason: str, token: str | None) -> NoReturn:
+        if token is not None and token != self._access_token:
+            raise EasyjobLoginRejectedError(f"{reason}; already being handled.")
+
+        self._access_token = None
+        self._token_expires_at = None
+        self._auth_failures += 1
+
+        retries = self._AUTH_RETRY_BACKOFF_SECONDS
+        if self._auth_failures > len(retries):
+            self._credentials_rejected = True
+            self._login_blocked_until = None
+            _LOGGER.warning(
+                "easyjob login rejected %s times (%s); no further attempts until reauthentication",
+                self._auth_failures,
+                reason,
+            )
+            raise EasyjobInvalidCredentialsError(f"{reason}; reauthentication required.")
+
+        delay = retries[self._auth_failures - 1]
+        self._login_blocked_until = datetime.now(timezone.utc) + timedelta(seconds=delay)
+        _LOGGER.warning(
+            "easyjob login rejected (%s); retry %s/%s in %ss",
+            reason,
+            self._auth_failures,
+            len(retries),
+            delay,
+        )
+        raise EasyjobLoginRejectedError(f"{reason}; retry {self._auth_failures}/{len(retries)} in {delay}s.")
+
+    async def _async_login(self) -> str:
+        """POST /token. Must be called with _token_lock held."""
 
         form = {
             "grant_type": "password",
@@ -200,7 +304,8 @@ class EasyjobClient:
                 timeout=self._timeout,
             ) as resp:
                 if resp.status in (401, 403):
-                    raise EasyjobAuthError("Token login failed (401/403).")
+                    # Lock is already held by async_get_token.
+                    self._count_auth_rejection(f"Token login failed ({resp.status})", None)
                 resp.raise_for_status()
                 payload = await resp.json()
 
@@ -218,6 +323,7 @@ class EasyjobClient:
             raise EasyjobAuthError("Missing access_token in /token response.")
 
         expires_in = int(payload.get("expires_in", 600))
+        self._login_blocked_until = None
         self._access_token = str(token)
         self._token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         return self._access_token

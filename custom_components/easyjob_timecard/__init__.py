@@ -107,22 +107,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_uid = _make_stable_unique_id(entry.data[CONF_BASE_URL], entry.data[CONF_USERNAME])
         hass.config_entries.async_update_entry(entry, unique_id=new_uid)
 
-    session = async_get_clientsession(hass)
+    domain_data = hass.data.setdefault(DOMAIN, {"entries": {}, "services": {}})
 
+    # Reuse the client across setup retries (ConfigEntryNotReady) so its login backoff /
+    # rejection state survives; a new client is only created when the connection data
+    # changed (e.g. after reauth) or the entry was unloaded.
     api_version = entry.data.get(CONF_API_VERSION, DEFAULT_API_VERSION)
-    client = EasyjobClient(
-        session=session,
-        base_url=entry.data[CONF_BASE_URL],
-        username=entry.data[CONF_USERNAME],
-        password=entry.data[CONF_PASSWORD],
-        verify_ssl=entry.data.get(CONF_VERIFY_SSL, True),
-        api_version=api_version,
+    client_key = (
+        entry.data[CONF_BASE_URL],
+        entry.data[CONF_USERNAME],
+        entry.data[CONF_PASSWORD],
+        entry.data.get(CONF_VERIFY_SSL, True),
+        api_version,
     )
+    cached = domain_data.setdefault("clients", {}).get(entry.entry_id)
+    if cached is not None and cached[0] == client_key:
+        client = cached[1]
+    else:
+        client = EasyjobClient(
+            session=async_get_clientsession(hass),
+            base_url=entry.data[CONF_BASE_URL],
+            username=entry.data[CONF_USERNAME],
+            password=entry.data[CONF_PASSWORD],
+            verify_ssl=entry.data.get(CONF_VERIFY_SSL, True),
+            api_version=api_version,
+        )
+        domain_data["clients"][entry.entry_id] = (client_key, client)
 
     coordinator = EasyjobCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
-    domain_data = hass.data.setdefault(DOMAIN, {"entries": {}, "services": {}})
     domain_data["entries"][entry.entry_id] = RuntimeData(client=client, coordinator=coordinator)
 
     # Reload entry when options change (important for dynamic entities / filters)
@@ -140,7 +154,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and DOMAIN in hass.data:
         hass.data[DOMAIN].get("entries", {}).pop(entry.entry_id, None)
+        hass.data[DOMAIN].get("clients", {}).pop(entry.entry_id, None)
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop a client cached from failed setup attempts."""
+    hass.data.get(DOMAIN, {}).get("clients", {}).pop(entry.entry_id, None)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

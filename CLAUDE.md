@@ -100,7 +100,14 @@ Die Integration unterstützt zwei API-Versionen, wählbar im Config Flow:
 - `init` – alle Felder aus Setup + Status-Auswahl in einem Schritt
 
 ### Reauth Flow
-- Ausgelöst durch `EasyjobAuthError` im Coordinator → `entry.async_start_reauth()`
+- Login-Ablehnung (401/403 auf `/token`, oder 401 trotz frischem Token) → bis zu 3 Retries mit Backoff (`_AUTH_RETRY_BACKOFF_SECONDS` = 60s/300s/900s). Während des Backoffs wirft der Client `EasyjobLoginRejectedError` ohne Request → Coordinator `UpdateFailed`
+- Nach dem letzten Retry: `EasyjobInvalidCredentialsError` → Coordinator `ConfigEntryAuthFailed` → HA startet Reauth und stoppt Polling bzw. Setup-Retries
+- Danach macht der Client keine Login-Versuche mehr (`_credentials_rejected`, auch nicht über Buttons/Services); erst ein Reload nach erfolgreichem Reauth erzeugt einen neuen Client
+- Jeder erfolgreiche authentifizierte Request setzt den Fehlerzähler zurück
+- Client wird in `hass.data[DOMAIN]["clients"]` über Setup-Retries hinweg wiederverwendet (sonst würde jeder Retry den Zähler zurücksetzen); neu erzeugt bei geänderten Verbindungsdaten oder nach Unload
+- 403 auf normalen API-Endpoints (gültiges Token, fehlende Berechtigung) ist **kein** Credential-Problem → kein Reauth, kein Zähler
+- Token-Login ist per `asyncio.Lock` serialisiert → parallele Requests teilen sich einen Login
+- Netzwerk-/SSL-Fehler beim Login bleiben `EasyjobAuthError` (kein Reauth, normales `UpdateFailed` mit Retry)
 - Step `reauth_confirm` – nur Username + Passwort, alle anderen Einstellungen bleiben erhalten
 
 ### Unique ID
