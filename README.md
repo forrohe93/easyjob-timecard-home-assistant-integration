@@ -11,7 +11,7 @@ Du kannst:
 
 Mehrere Benutzer werden unterstützt.
 
-> **Version 1.0.0** – Erster stabiler Release. Neu: Unterstützung für easyjob WebApi v2, automatischer Reauth-Flow bei ungültigen Zugangsdaten.
+> **Version 1.0.2** – Keine Login-Flut mehr bei ungültigen Zugangsdaten: nach 3 Retries mit Backoff wird die Neuanmeldung angefordert und es finden keine weiteren Login-Versuche statt.
 
 ---
 
