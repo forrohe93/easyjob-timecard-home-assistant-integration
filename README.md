@@ -11,7 +11,7 @@ Du kannst:
 
 Mehrere Benutzer werden unterstützt.
 
-> **Version 1.0.2** – Keine Login-Flut mehr bei ungültigen Zugangsdaten: nach 3 Retries mit Backoff wird die Neuanmeldung angefordert und es finden keine weiteren Login-Versuche statt.
+> **Version 1.0.2** – Keine Login-Flut mehr bei ungültigen Zugangsdaten: nach 3 Retries mit Backoff wird die Neuanmeldung angefordert und es finden keine weiteren Login-Versuche statt. Neu: Blueprint zum automatischen Starten/Stoppen der Zeiterfassung.
 
 ---
 
@@ -105,6 +105,20 @@ Wird ein Status später entfernt, wird die Entität automatisch aus Home Assista
 
 Attribut:
 - `event_color` – HEX-Farbwert des aktuellen oder nächsten Events
+
+---
+
+## 🤖 Blueprint: Zeiterfassung automatisch starten/stoppen
+
+[![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fforrohe93%2Feasyjob-timecard-home-assistant-integration%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Feasyjob_worktime_auto.yaml)
+
+Startet die Zeiterfassung, sobald mindestens einer der gewählten Auslöser zutrifft, und stoppt sie, wenn keiner mehr zutrifft:
+
+- **Zonen** – eine Person befindet sich in einer der gewählten Zonen
+- **Smarthome-Auslöser** – z. B. ein Home-Office-Schalter, Input Boolean, Binary Sensor oder Zeitplan ist `an`
+- **Ressourcenstatus** – laut easyjob-Kalender gilt gerade ein gewählter Status (die Status müssen in den Optionen der Integration als Binary Sensoren aktiviert sein)
+
+Optional: Pause-Schalter zum vorübergehenden Deaktivieren, Start/Stopp einzeln abschaltbar, Stopp-Verzögerung gegen GPS-Sprünge am Zonenrand.
 
 ---
 

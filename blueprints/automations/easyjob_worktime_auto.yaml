@@ -1,0 +1,243 @@
+blueprint:
+  name: easyjob Zeiterfassung automatisch starten/stoppen
+  description: >
+    Startet und stoppt die easyjob Zeiterfassung automatisch. Es gibt drei Auslöser,
+    die beliebig kombiniert werden können. Die Zeiterfassung soll laufen, sobald
+    **mindestens einer** davon zutrifft:
+
+
+    * **Zonen** – die Person befindet sich in einer der gewählten Zonen
+
+    * **Smarthome-Auslöser** – eine der gewählten Entitäten ist `an`
+      (z. B. Home-Office-Schalter, Input Boolean, Binary Sensor, Zeitplan)
+
+    * **Ressourcenstatus** – laut easyjob-Kalender gilt gerade einer der gewählten
+      Ressourcenstatus. Dafür müssen die Status vorher in den Optionen der
+      Integration als Binary Sensoren aktiviert werden („Status aktiv: …“).
+
+
+    Gestartet wird, wenn ein Auslöser zutreffend wird. Gestoppt wird, wenn ein Auslöser
+    nicht mehr zutrifft **und** auch kein anderer mehr zutrifft. Eine manuell gestartete
+    Zeiterfassung wird also nur gestoppt, wenn ein Auslöser tatsächlich wegfällt.
+
+
+    Über einen Pause-Schalter lässt sich die Automation vorübergehend deaktivieren.
+  domain: automation
+  author: Heiko Forro
+  source_url: https://github.com/forrohe93/easyjob-timecard-home-assistant-integration/blob/main/blueprints/automations/easyjob_worktime_auto.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    worktime:
+      name: Zeiterfassung
+      icon: mdi:clock-check
+      input:
+        worktime_switch:
+          name: Zeiterfassungs-Schalter
+          description: Der Schalter „Zeiterfassung“ der easyjob Timecard Integration.
+          selector:
+            entity:
+              filter:
+                - domain: switch
+                  integration: easyjob_timecard
+
+    zone_section:
+      name: Zonen
+      icon: mdi:map-marker-radius
+      collapsed: true
+      input:
+        person:
+          name: Person
+          description: Die Person, deren Aufenthaltsort ausgewertet wird.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: person
+        zones:
+          name: Zonen
+          description: In diesen Zonen läuft die Zeiterfassung (z. B. Büro, Lager).
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: zone
+
+    trigger_section:
+      name: Smarthome-Auslöser
+      icon: mdi:home-account
+      collapsed: true
+      input:
+        trigger_entities:
+          name: Auslöser-Entitäten
+          description: Ist eine davon `an`, läuft die Zeiterfassung (z. B. ein Home-Office-Schalter).
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain:
+                    - input_boolean
+                    - switch
+                    - binary_sensor
+                    - schedule
+
+    status_section:
+      name: Ressourcenstatus (easyjob-Kalender)
+      icon: mdi:calendar-check
+      collapsed: true
+      input:
+        status_sensors:
+          name: Ressourcenstatus-Sensoren
+          description: >
+            Die Binary Sensoren „Status aktiv: …“ der Integration. Fehlt ein Status,
+            zuerst in den Optionen der Integration aktivieren.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: binary_sensor
+                  integration: easyjob_timecard
+
+    options_section:
+      name: Optionen
+      icon: mdi:cog
+      collapsed: true
+      input:
+        pause_entities:
+          name: Pause-Schalter
+          description: Solange einer dieser Schalter `an` ist, macht die Automation nichts.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain:
+                    - input_boolean
+                    - switch
+        allow_start:
+          name: Automatisch starten
+          default: true
+          selector:
+            boolean: {}
+        allow_stop:
+          name: Automatisch stoppen
+          default: true
+          selector:
+            boolean: {}
+        stop_delay:
+          name: Stopp-Verzögerung
+          description: >
+            So lange wird nach Wegfall eines Auslösers gewartet, bevor gestoppt wird.
+            Trifft in der Zeit wieder ein Auslöser zu, wird nicht gestoppt. Hilft gegen
+            GPS-Sprünge am Zonenrand.
+          default:
+            minutes: 0
+          selector:
+            duration: {}
+
+# parallel: a pending stop (stop_delay) must not be cancelled by unrelated triggers,
+# e.g. other persons entering/leaving one of the zones.
+mode: parallel
+max: 10
+
+variables:
+  person: !input person
+  zones: !input zones
+  trigger_entities: !input trigger_entities
+  status_sensors: !input status_sensors
+  pause_entities: !input pause_entities
+  allow_start: !input allow_start
+  allow_stop: !input allow_stop
+  # on = a trigger source became active, off = became inactive, none = irrelevant event
+  edge: >-
+    {%- if trigger.id == 'zone' -%}
+      {%- set before = person != '' and trigger.from_state is not none
+          and person in (trigger.from_state.attributes.persons | default([])) -%}
+      {%- set after = person != '' and trigger.to_state is not none
+          and person in (trigger.to_state.attributes.persons | default([])) -%}
+      {{ 'on' if after and not before else 'off' if before and not after else 'none' }}
+    {%- elif trigger.id == 'source_on' -%}
+      on
+    {%- else -%}
+      off
+    {%- endif -%}
+
+triggers:
+  # Zone state = number of persons; also fires on changes of the "persons" attribute.
+  - trigger: state
+    entity_id: !input zones
+    id: zone
+  - trigger: state
+    entity_id: !input trigger_entities
+    to: "on"
+    not_from: [unavailable, unknown]
+    id: source_on
+  - trigger: state
+    entity_id: !input trigger_entities
+    from: "on"
+    not_to: [unavailable, unknown]
+    id: source_off
+  - trigger: state
+    entity_id: !input status_sensors
+    to: "on"
+    not_from: [unavailable, unknown]
+    id: source_on
+  - trigger: state
+    entity_id: !input status_sensors
+    from: "on"
+    not_to: [unavailable, unknown]
+    id: source_off
+
+conditions:
+  - alias: Relevantes Ereignis
+    condition: template
+    value_template: "{{ edge in ['on', 'off'] }}"
+  - alias: Nicht pausiert
+    condition: template
+    value_template: "{{ pause_entities | select('is_state', 'on') | list | count == 0 }}"
+
+actions:
+  - choose:
+      - alias: Starten
+        conditions:
+          - condition: template
+            value_template: "{{ edge == 'on' and allow_start }}"
+          - condition: state
+            entity_id: !input worktime_switch
+            state: "off"
+        sequence:
+          - action: switch.turn_on
+            target:
+              entity_id: !input worktime_switch
+
+      - alias: Stoppen
+        conditions:
+          - condition: template
+            value_template: "{{ edge == 'off' and allow_stop }}"
+        sequence:
+          - delay: !input stop_delay
+          # Re-evaluate after the delay: stop only if no trigger source is active anymore.
+          - variables:
+              any_active: >-
+                {%- set ns = namespace(in_zone=false) -%}
+                {%- for z in zones -%}
+                  {%- if person != '' and person in (state_attr(z, 'persons') or []) -%}
+                    {%- set ns.in_zone = true -%}
+                  {%- endif -%}
+                {%- endfor -%}
+                {{ ns.in_zone
+                   or trigger_entities | select('is_state', 'on') | list | count > 0
+                   or status_sensors | select('is_state', 'on') | list | count > 0 }}
+          - condition: template
+            value_template: "{{ not any_active }}"
+          - condition: template
+            value_template: "{{ pause_entities | select('is_state', 'on') | list | count == 0 }}"
+          - condition: state
+            entity_id: !input worktime_switch
+            state: "on"
+          - action: switch.turn_off
+            target:
+              entity_id: !input worktime_switch
