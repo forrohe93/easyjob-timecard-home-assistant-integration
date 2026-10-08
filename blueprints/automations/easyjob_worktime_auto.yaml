@@ -14,11 +14,18 @@ blueprint:
     * **Ressourcenstatus** – laut easyjob-Kalender gilt gerade einer der gewählten
       Ressourcenstatus. Dafür müssen die Status vorher in den Optionen der
       Integration als Binary Sensoren aktiviert werden („Status aktiv: …“).
+      Optional zählt der Status nur, wenn zusätzlich eine Bedingung erfüllt ist
+      (z. B. PC eingeschaltet oder Präsenz im Arbeitszimmer).
 
 
     Gestartet wird, wenn ein Auslöser zutreffend wird. Gestoppt wird, wenn ein Auslöser
     nicht mehr zutrifft **und** auch kein anderer mehr zutrifft. Eine manuell gestartete
     Zeiterfassung wird also nur gestoppt, wenn ein Auslöser tatsächlich wegfällt.
+
+
+    Optional wird ein Gerät mit der Companion App benachrichtigt, wenn die Zeiterfassung
+    gestartet oder gestoppt wurde. Pro Auslöser-Art kann stattdessen auch nachgefragt
+    werden – die Aktion wird dann erst nach „Ja“ ausgeführt.
 
 
     Über einen Pause-Schalter lässt sich die Automation vorübergehend deaktivieren.
@@ -63,6 +70,12 @@ blueprint:
               multiple: true
               filter:
                 - domain: zone
+        ask_zone:
+          name: Nachfragen
+          description: Per Benachrichtigung fragen, statt automatisch zu starten/stoppen.
+          default: false
+          selector:
+            boolean: {}
 
     trigger_section:
       name: Smarthome-Auslöser
@@ -82,6 +95,12 @@ blueprint:
                     - switch
                     - binary_sensor
                     - schedule
+        ask_trigger:
+          name: Nachfragen
+          description: Per Benachrichtigung fragen, statt automatisch zu starten/stoppen.
+          default: false
+          selector:
+            boolean: {}
 
     status_section:
       name: Ressourcenstatus (easyjob-Kalender)
@@ -100,6 +119,64 @@ blueprint:
               filter:
                 - domain: binary_sensor
                   integration: easyjob_timecard
+        status_conditions:
+          name: Zusätzliche Bedingung (optional)
+          description: >
+            Wenn gesetzt, zählt der Ressourcenstatus nur, solange auch mindestens eine
+            dieser Entitäten `an` ist – z. B. PC eingeschaltet oder Präsenz im
+            Arbeitszimmer. Leer lassen, damit der Status allein reicht.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain:
+                    - input_boolean
+                    - switch
+                    - binary_sensor
+                    - schedule
+        ask_status:
+          name: Nachfragen
+          description: Per Benachrichtigung fragen, statt automatisch zu starten/stoppen.
+          default: false
+          selector:
+            boolean: {}
+
+    notify_section:
+      name: Benachrichtigung
+      icon: mdi:cellphone-message
+      collapsed: true
+      input:
+        notify_device:
+          name: Benachrichtigungs-Ziel
+          description: >
+            Gerät mit der Home Assistant Companion App. Wird für Infos und für die
+            Nachfragen („Nachfragen“ bei den Auslösern) verwendet. Ohne Gerät wird
+            nicht benachrichtigt und nie nachgefragt.
+          default: ""
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+        notify_on_start:
+          name: Bei Start benachrichtigen
+          description: Info, wenn die Zeiterfassung automatisch gestartet wurde.
+          default: true
+          selector:
+            boolean: {}
+        notify_on_stop:
+          name: Bei Stopp benachrichtigen
+          description: Info, wenn die Zeiterfassung automatisch gestoppt wurde.
+          default: false
+          selector:
+            boolean: {}
+        ask_timeout:
+          name: Wartezeit auf Antwort
+          description: Wird eine Nachfrage in dieser Zeit nicht beantwortet, passiert nichts.
+          default:
+            minutes: 15
+          selector:
+            duration: {}
 
     options_section:
       name: Optionen
@@ -141,16 +218,43 @@ blueprint:
 # parallel: a pending stop (stop_delay) must not be cancelled by unrelated triggers,
 # e.g. other persons entering/leaving one of the zones.
 mode: parallel
-max: 10
+max: 25
+max_exceeded: silent
 
 variables:
   person: !input person
   zones: !input zones
   trigger_entities: !input trigger_entities
   status_sensors: !input status_sensors
+  status_conditions: !input status_conditions
   pause_entities: !input pause_entities
   allow_start: !input allow_start
   allow_stop: !input allow_stop
+  ask_zone: !input ask_zone
+  ask_trigger: !input ask_trigger
+  ask_status: !input ask_status
+  notify_device: !input notify_device
+  notify_on_start: !input notify_on_start
+  notify_on_stop: !input notify_on_stop
+  # Companion app notify action, e.g. notify.mobile_app_pixel_8 ('' if no device selected)
+  notify_service: >-
+    {%- if notify_device -%}
+      notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}
+    {%- endif -%}
+  source: >-
+    {{ 'zone' if trigger.id == 'zone'
+       else 'trigger' if trigger.id in ['source_on', 'source_off']
+       else 'status' }}
+  ask: >-
+    {{ notify_service != ''
+       and ((source == 'zone' and ask_zone)
+         or (source == 'trigger' and ask_trigger)
+         or (source == 'status' and ask_status)) }}
+  reason: "{{ trigger.to_state.name if trigger.to_state is not none else '' }}"
+  status_any_on: "{{ status_sensors | select('is_state', 'on') | list | count > 0 }}"
+  status_condition_ok: >-
+    {{ status_conditions | count == 0
+       or status_conditions | select('is_state', 'on') | list | count > 0 }}
   # on = a trigger source became active, off = became inactive, none = irrelevant event
   edge: >-
     {%- if trigger.id == 'zone' -%}
@@ -161,6 +265,14 @@ variables:
       {{ 'on' if after and not before else 'off' if before and not after else 'none' }}
     {%- elif trigger.id == 'source_on' -%}
       on
+    {%- elif trigger.id == 'status_on' -%}
+      {{ 'on' if status_condition_ok else 'none' }}
+    {%- elif trigger.id == 'status_off' -%}
+      {{ 'off' if status_condition_ok else 'none' }}
+    {%- elif trigger.id == 'condition_on' -%}
+      {{ 'on' if status_any_on else 'none' }}
+    {%- elif trigger.id == 'condition_off' -%}
+      {{ 'off' if status_any_on else 'none' }}
     {%- else -%}
       off
     {%- endif -%}
@@ -184,12 +296,22 @@ triggers:
     entity_id: !input status_sensors
     to: "on"
     not_from: [unavailable, unknown]
-    id: source_on
+    id: status_on
   - trigger: state
     entity_id: !input status_sensors
     from: "on"
     not_to: [unavailable, unknown]
-    id: source_off
+    id: status_off
+  - trigger: state
+    entity_id: !input status_conditions
+    to: "on"
+    not_from: [unavailable, unknown]
+    id: condition_on
+  - trigger: state
+    entity_id: !input status_conditions
+    from: "on"
+    not_to: [unavailable, unknown]
+    id: condition_off
 
 conditions:
   - alias: Relevantes Ereignis
@@ -209,9 +331,67 @@ actions:
             entity_id: !input worktime_switch
             state: "off"
         sequence:
-          - action: switch.turn_on
-            target:
-              entity_id: !input worktime_switch
+          - if:
+              - condition: template
+                value_template: "{{ ask }}"
+            then:
+              # Unique per run, so parallel questions don't answer each other.
+              - variables:
+                  run_token: "{{ now().timestamp() | string | replace('.', '') }}"
+                  answer_yes: "{{ 'EASYJOB_YES_' ~ run_token }}"
+                  answer_no: "{{ 'EASYJOB_NO_' ~ run_token }}"
+                  notify_tag: "{{ 'easyjob_worktime_' ~ run_token }}"
+              - action: "{{ notify_service }}"
+                data:
+                  title: Zeiterfassung
+                  message: "Zeiterfassung starten? (Auslöser: {{ reason }})"
+                  data:
+                    tag: "{{ notify_tag }}"
+                    actions:
+                      - action: "{{ answer_yes }}"
+                        title: "Ja"
+                      - action: "{{ answer_no }}"
+                        title: "Nein"
+              - wait_for_trigger:
+                  - trigger: event
+                    event_type: mobile_app_notification_action
+                    event_data:
+                      action: "{{ answer_yes }}"
+                  - trigger: event
+                    event_type: mobile_app_notification_action
+                    event_data:
+                      action: "{{ answer_no }}"
+                timeout: !input ask_timeout
+              - if:
+                  - condition: template
+                    value_template: "{{ wait.trigger is none }}"
+                then:
+                  - action: "{{ notify_service }}"
+                    data:
+                      message: clear_notification
+                      data:
+                        tag: "{{ notify_tag }}"
+                  - stop: Keine Antwort auf die Nachfrage.
+              - condition: template
+                value_template: "{{ wait.trigger.event.data.action == answer_yes }}"
+              - condition: state
+                entity_id: !input worktime_switch
+                state: "off"
+              - action: switch.turn_on
+                target:
+                  entity_id: !input worktime_switch
+            else:
+              - action: switch.turn_on
+                target:
+                  entity_id: !input worktime_switch
+              - if:
+                  - condition: template
+                    value_template: "{{ notify_on_start and notify_service != '' }}"
+                then:
+                  - action: "{{ notify_service }}"
+                    data:
+                      title: Zeiterfassung
+                      message: "Zeiterfassung gestartet (Auslöser: {{ reason }})"
 
       - alias: Stoppen
         conditions:
@@ -228,9 +408,12 @@ actions:
                     {%- set ns.in_zone = true -%}
                   {%- endif -%}
                 {%- endfor -%}
+                {%- set status_on = status_sensors | select('is_state', 'on') | list | count > 0 -%}
+                {%- set condition_ok = status_conditions | count == 0
+                    or status_conditions | select('is_state', 'on') | list | count > 0 -%}
                 {{ ns.in_zone
                    or trigger_entities | select('is_state', 'on') | list | count > 0
-                   or status_sensors | select('is_state', 'on') | list | count > 0 }}
+                   or (status_on and condition_ok) }}
           - condition: template
             value_template: "{{ not any_active }}"
           - condition: template
@@ -238,6 +421,64 @@ actions:
           - condition: state
             entity_id: !input worktime_switch
             state: "on"
-          - action: switch.turn_off
-            target:
-              entity_id: !input worktime_switch
+          - if:
+              - condition: template
+                value_template: "{{ ask }}"
+            then:
+              # Unique per run, so parallel questions don't answer each other.
+              - variables:
+                  run_token: "{{ now().timestamp() | string | replace('.', '') }}"
+                  answer_yes: "{{ 'EASYJOB_YES_' ~ run_token }}"
+                  answer_no: "{{ 'EASYJOB_NO_' ~ run_token }}"
+                  notify_tag: "{{ 'easyjob_worktime_' ~ run_token }}"
+              - action: "{{ notify_service }}"
+                data:
+                  title: Zeiterfassung
+                  message: "Zeiterfassung beenden? (Auslöser: {{ reason }})"
+                  data:
+                    tag: "{{ notify_tag }}"
+                    actions:
+                      - action: "{{ answer_yes }}"
+                        title: "Ja"
+                      - action: "{{ answer_no }}"
+                        title: "Nein"
+              - wait_for_trigger:
+                  - trigger: event
+                    event_type: mobile_app_notification_action
+                    event_data:
+                      action: "{{ answer_yes }}"
+                  - trigger: event
+                    event_type: mobile_app_notification_action
+                    event_data:
+                      action: "{{ answer_no }}"
+                timeout: !input ask_timeout
+              - if:
+                  - condition: template
+                    value_template: "{{ wait.trigger is none }}"
+                then:
+                  - action: "{{ notify_service }}"
+                    data:
+                      message: clear_notification
+                      data:
+                        tag: "{{ notify_tag }}"
+                  - stop: Keine Antwort auf die Nachfrage.
+              - condition: template
+                value_template: "{{ wait.trigger.event.data.action == answer_yes }}"
+              - condition: state
+                entity_id: !input worktime_switch
+                state: "on"
+              - action: switch.turn_off
+                target:
+                  entity_id: !input worktime_switch
+            else:
+              - action: switch.turn_off
+                target:
+                  entity_id: !input worktime_switch
+              - if:
+                  - condition: template
+                    value_template: "{{ notify_on_stop and notify_service != '' }}"
+                then:
+                  - action: "{{ notify_service }}"
+                    data:
+                      title: Zeiterfassung
+                      message: "Zeiterfassung gestoppt (Auslöser: {{ reason }})"

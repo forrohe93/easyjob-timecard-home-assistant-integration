@@ -116,9 +116,11 @@ Startet die Zeiterfassung, sobald mindestens einer der gewählten Auslöser zutr
 
 - **Zonen** – eine Person befindet sich in einer der gewählten Zonen
 - **Smarthome-Auslöser** – z. B. ein Home-Office-Schalter, Input Boolean, Binary Sensor oder Zeitplan ist `an`
-- **Ressourcenstatus** – laut easyjob-Kalender gilt gerade ein gewählter Status (die Status müssen in den Optionen der Integration als Binary Sensoren aktiviert sein)
+- **Ressourcenstatus** – laut easyjob-Kalender gilt gerade ein gewählter Status (die Status müssen in den Optionen der Integration als Binary Sensoren aktiviert sein). Optional mit **zusätzlicher Bedingung**: Der Status zählt dann nur, solange z. B. auch der PC eingeschaltet ist oder im Arbeitszimmer Präsenz erkannt wird.
 
 Optional: Pause-Schalter zum vorübergehenden Deaktivieren, Start/Stopp einzeln abschaltbar, Stopp-Verzögerung gegen GPS-Sprünge am Zonenrand.
+
+**Benachrichtigungen:** Ein Gerät mit der Companion App kann informiert werden, wenn die Zeiterfassung gestartet oder gestoppt wurde. Pro Auslöser-Art (Zonen, Smarthome-Auslöser, Ressourcenstatus) lässt sich außerdem „Nachfragen“ aktivieren – dann kommt eine Benachrichtigung mit **Ja/Nein**, und die Aktion wird erst nach „Ja“ ausgeführt.
 
 ---
 
