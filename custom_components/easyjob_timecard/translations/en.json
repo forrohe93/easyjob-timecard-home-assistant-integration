@@ -97,16 +97,13 @@
       "fields": {
         "device_id": {
           "name": "Device",
-          "description": "The easyjob device (per user/account).",
-          "required": true
+          "description": "The easyjob device (per user/account)."
         },
         "start": {
-          "name": "Start",
-          "required": true
+          "name": "Start"
         },
         "end": {
-          "name": "End",
-          "required": true
+          "name": "End"
         }
       }
     }

@@ -5,7 +5,7 @@
 Home Assistant Custom Integration für **protonic easyjob Timecard** und den easyjob Ressourcenplan (Kalender).
 
 - Repo: https://github.com/forrohe93/easyjob-timecard-home-assistant-integration
-- Aktuelle Version: **1.0.2**
+- Aktuelle Version: **1.0.3**
 - Quality Scale: **bronze**
 - HA Mindestversion: 2025.6.0
 
